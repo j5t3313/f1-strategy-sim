@@ -140,7 +140,7 @@ WEIGHT_EFFECT_S_PER_KG = 0.03
 PACE_SIGMA = 0.4
 
 STRATEGY_COLORS = ["#e10600", "#0090ff", "#22c55e", "#ff8700", "#a855f7"]
-COMPOUND_COLORS = {"SOFT": "#ff1801", "MEDIUM": "#ffd700", "HARD": "#e0e0e0"}
+COMPOUND_COLORS = {"SOFT": "#dc2626", "MEDIUM": "#ca8a04", "HARD": "#6b7280"}
 
 
 class F1StrategySimulator:
@@ -377,46 +377,46 @@ def make_stint_sequence(strategy):
 
 def chart_layout(title=""):
     return dict(
-        paper_bgcolor="#12161d",
-        plot_bgcolor="#12161d",
-        font=dict(color="#c9d1d9", family="DM Sans", size=12),
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font=dict(color="#374151", family="DM Sans", size=12),
         title=dict(
             text=title,
-            font=dict(family="Barlow Semi Condensed", size=16, color="#e2e8f0"),
+            font=dict(family="Barlow Semi Condensed", size=16, color="#111827"),
             x=0.01, xanchor="left",
         ),
         xaxis=dict(
-            gridcolor="#252b36", zerolinecolor="#252b36",
+            gridcolor="#e5e7eb", zerolinecolor="#d1d5db",
             tickfont=dict(family="JetBrains Mono", size=11),
         ),
         yaxis=dict(
-            gridcolor="#252b36", zerolinecolor="#252b36",
+            gridcolor="#e5e7eb", zerolinecolor="#d1d5db",
             tickfont=dict(family="JetBrains Mono", size=11),
         ),
         legend=dict(
             font=dict(size=11),
-            bgcolor="rgba(0,0,0,0)",
-            bordercolor="rgba(0,0,0,0)",
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#e5e7eb",
         ),
         margin=dict(l=60, r=30, t=50, b=50),
     )
 
 
 TABLE_HEADER = {
-    "backgroundColor": "#1a1f28", "color": "#e2e8f0",
+    "backgroundColor": "#f3f4f6", "color": "#111827",
     "fontFamily": "Barlow Semi Condensed", "fontWeight": "600",
     "fontSize": "12px", "letterSpacing": "0.5px",
-    "border": "1px solid #252b36", "textAlign": "center",
+    "border": "1px solid #e5e7eb", "textAlign": "center",
 }
 
 TABLE_CELL = {
-    "backgroundColor": "#12161d", "color": "#c9d1d9",
+    "backgroundColor": "#ffffff", "color": "#374151",
     "fontFamily": "JetBrains Mono", "fontSize": "12px",
-    "border": "1px solid #252b36", "textAlign": "center", "padding": "8px",
+    "border": "1px solid #e5e7eb", "textAlign": "center", "padding": "8px",
 }
 
 TABLE_CONDITIONAL = [
-    {"if": {"row_index": "odd"}, "backgroundColor": "#161b22"},
+    {"if": {"row_index": "odd"}, "backgroundColor": "#f9fafb"},
 ]
 
 
@@ -672,11 +672,11 @@ def render_tire_sets(toggle):
         [
             html.Div(
                 "Sets per compound",
-                style={"fontSize": "10px", "color": "#545d68", "marginBottom": "4px"},
+                style={"fontSize": "10px", "color": "#9ca3af", "marginBottom": "4px"},
             ),
             *rows,
             html.Hr(style={
-                "borderColor": "var(--border)", "margin": "10px 0", "opacity": "0.5",
+                "borderColor": "#e5e7eb", "margin": "10px 0", "opacity": "0.5",
             }),
             html.Div(id="tire-ages-section"),
         ],
@@ -723,7 +723,7 @@ def render_tire_ages(soft_sets, medium_sets, hard_sets):
                                 f"Set {i + 1}",
                                 style={
                                     "fontSize": "10px",
-                                    "color": "#545d68",
+                                    "color": "#9ca3af",
                                     "paddingLeft": "6px",
                                 },
                             ),
@@ -749,7 +749,7 @@ def render_tire_ages(soft_sets, medium_sets, hard_sets):
     if not sections:
         return html.Div(
             "No tire sets allocated",
-            style={"fontSize": "11px", "color": "#545d68"},
+            style={"fontSize": "11px", "color": "#9ca3af"},
         )
     return html.Div(sections)
 
@@ -809,7 +809,7 @@ def render_strategy_editor(toggle, circuit, strategies):
                                 f"Stint {t_idx + 1}",
                                 style={
                                     "fontSize": "11px",
-                                    "color": "#8b949e",
+                                    "color": "#6b7280",
                                     "fontFamily": "Barlow Semi Condensed",
                                     "fontWeight": "500",
                                 },
@@ -843,7 +843,7 @@ def render_strategy_editor(toggle, circuit, strategies):
                         dbc.Col(
                             html.Span(
                                 "laps",
-                                style={"fontSize": "10px", "color": "#545d68"},
+                                style={"fontSize": "10px", "color": "#9ca3af"},
                             ),
                             width=2, className="d-flex align-items-center",
                         ),
@@ -1139,7 +1139,7 @@ def display_results(data):
             type="data", symmetric=False,
             array=[p95 - med for p95, med in zip(p95s, medians)],
             arrayminus=[med - p5 for p5, med in zip(p5s, medians)],
-            color="#8b949e", thickness=1.5,
+            color="#9ca3af", thickness=1.5,
         ),
     ))
     comp_fig.update_layout(
