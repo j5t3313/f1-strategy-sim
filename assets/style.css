@@ -345,13 +345,12 @@ body,
 
 /* ---- INPUTS ---- */
 
-input,
 input[type="number"],
 input[type="text"],
+input[type="search"],
 .dash-input input,
-.sidebar input,
-.editor-card input,
-.form-control {
+.sidebar input[type="number"],
+.editor-card input[type="number"] {
     background: var(--bg-input) !important;
     background-color: var(--bg-input) !important;
     border: 1px solid var(--border) !important;
@@ -364,9 +363,9 @@ input[type="text"],
     outline: none !important;
 }
 
-input:focus,
 input[type="number"]:focus,
-.form-control:focus {
+input[type="text"]:focus,
+input[type="search"]:focus {
     border-color: var(--accent) !important;
     box-shadow: 0 0 0 2px var(--accent-dim) !important;
     outline: none !important;
