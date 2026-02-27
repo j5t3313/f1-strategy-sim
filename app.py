@@ -423,7 +423,7 @@ TABLE_CONDITIONAL = [
 app = dash.Dash(
     __name__,
     external_stylesheets=[
-        dbc.themes.DARKLY,
+        dbc.themes.BOOTSTRAP,
         "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Semi+Condensed:wght@300;400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap",
     ],
     title="F1 Strategy Simulator | 2026",
@@ -431,113 +431,6 @@ app = dash.Dash(
     suppress_callback_exceptions=True,
 )
 
-app.index_string = '''<!DOCTYPE html>
-<html>
-    <head>
-        {%metas%}
-        <title>{%title%}</title>
-        {%favicon%}
-        {%css%}
-        <style>
-            /* Critical overrides — loads after Darkly and assets CSS */
-            body, #react-entry-point {
-                background: #0a0e14 !important;
-                background-color: #0a0e14 !important;
-                color: #e2e8f0 !important;
-            }
-            .Select-control,
-            .Select > .Select-control,
-            .dash-dropdown .Select-control {
-                background: #1a1f28 !important;
-                background-color: #1a1f28 !important;
-                border: 1px solid #252b36 !important;
-                color: #e2e8f0 !important;
-            }
-            .Select-menu-outer,
-            .dash-dropdown .Select-menu-outer {
-                background: #181d26 !important;
-                background-color: #181d26 !important;
-                border: 1px solid #252b36 !important;
-            }
-            .Select-menu,
-            .dash-dropdown .Select-menu {
-                background: #181d26 !important;
-            }
-            .Select-option,
-            .VirtualizedSelectOption {
-                background: #181d26 !important;
-                background-color: #181d26 !important;
-                color: #e2e8f0 !important;
-            }
-            .Select-option.is-focused,
-            .VirtualizedSelectFocusedOption {
-                background: #1e2430 !important;
-                background-color: #1e2430 !important;
-            }
-            .Select-option.is-selected {
-                background: rgba(225,6,0,0.12) !important;
-            }
-            .Select-value-label,
-            .Select--single > .Select-control .Select-value .Select-value-label {
-                color: #e2e8f0 !important;
-            }
-            .Select-value {
-                color: #e2e8f0 !important;
-            }
-            .Select--multi .Select-value {
-                background: #181d26 !important;
-                border: 1px solid #252b36 !important;
-                color: #e2e8f0 !important;
-            }
-            .Select--multi .Select-value-label {
-                color: #e2e8f0 !important;
-            }
-            .Select-placeholder {
-                color: #545d68 !important;
-            }
-            .Select-input > input,
-            .Select-input {
-                color: #e2e8f0 !important;
-            }
-            .Select-arrow-zone .Select-arrow {
-                border-color: #545d68 transparent transparent !important;
-            }
-            .Select-noresults {
-                background: #181d26 !important;
-                color: #545d68 !important;
-            }
-            input[type="number"],
-            input[type="text"],
-            input[type="search"] {
-                background: #1a1f28 !important;
-                background-color: #1a1f28 !important;
-                border: 1px solid #252b36 !important;
-                color: #e2e8f0 !important;
-            }
-            .form-control, .form-select {
-                background: #1a1f28 !important;
-                background-color: #1a1f28 !important;
-                border-color: #252b36 !important;
-                color: #e2e8f0 !important;
-            }
-            .form-control:focus, .form-select:focus {
-                background: #1a1f28 !important;
-                background-color: #1a1f28 !important;
-                border-color: #e10600 !important;
-                color: #e2e8f0 !important;
-                box-shadow: 0 0 0 2px rgba(225,6,0,0.12) !important;
-            }
-        </style>
-    </head>
-    <body>
-        {%app_entry%}
-        <footer>
-            {%config%}
-            {%scripts%}
-            {%renderer%}
-        </footer>
-    </body>
-</html>'''
 server = app.server
 simulator = F1StrategySimulator()
 
