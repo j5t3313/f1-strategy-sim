@@ -1068,12 +1068,15 @@ def run_simulation(n_clicks, circuit, strategies, pace, pit, sims,
 
 @app.callback(
     Output("results-section", "children"),
+    Output("strategy-display", "style"),
+    Output("strategy-editor-container", "style"),
     Input("results-store", "data"),
 )
 def display_results(data):
     if not data:
-        return []
+        return [], {"display": "block"}, {"display": "block"}
 
+    hide = {"display": "none"}
     results = {k: np.array(v) for k, v in data["results"].items()}
     circuit = data["circuit"]
     names = list(results.keys())
@@ -1090,8 +1093,6 @@ def display_results(data):
         med = np.median(times)
         dist_fig.add_vline(
             x=med, line_dash="dash", line_color=color, line_width=2,
-            annotation_text=f"{med:.1f}s",
-            annotation_font=dict(color=color, size=10, family="JetBrains Mono"),
         )
     dist_fig.update_layout(
         **chart_layout("Performance Distribution"),
@@ -1260,7 +1261,7 @@ def display_results(data):
             style_data_conditional=TABLE_CONDITIONAL,
             style_table={"overflowX": "auto"},
         ),
-    ])
+    ]), hide, hide
 
 
 @app.callback(
