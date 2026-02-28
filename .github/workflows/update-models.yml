@@ -1,0 +1,75 @@
+name: Update Tire Models
+
+on:
+  workflow_dispatch:
+    inputs:
+      circuit:
+        description: Circuit
+        required: true
+        type: choice
+        options:
+          - australia
+          - china
+          - japan
+          - bahrain
+          - saudi_arabia
+          - miami
+          - canada
+          - monaco
+          - barcelona_catalunya
+          - austria
+          - britain
+          - belgium
+          - hungary
+          - netherlands
+          - italy
+          - madrid
+          - azerbaijan
+          - singapore
+          - united_states
+          - mexico
+          - brazil
+          - las_vegas
+          - qatar
+          - abu_dhabi
+      session:
+        description: Session
+        required: true
+        type: choice
+        default: FP2
+        options:
+          - FP1
+          - FP2
+          - FP3
+      year:
+        description: Season year
+        required: true
+        type: number
+        default: 2026
+
+jobs:
+  fit-models:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements-pipeline.txt
+
+      - run: python fit_models.py ${{ inputs.circuit }} --year ${{ inputs.year }} --session ${{ inputs.session }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ inputs.circuit }}-${{ inputs.session }}
+          path: prebuilt_models/
+          retention-days: 90
+
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add prebuilt_models/
+          git diff --cached --quiet || git commit -m "Update ${{ inputs.circuit }} models from ${{ inputs.session }} ${{ inputs.year }}"
+          git push
