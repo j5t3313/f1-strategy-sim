@@ -538,7 +538,8 @@ welcome_content = html.Div(
                 html.P(
                     "70 kg fuel load (sustainable fuel, lower energy density), "
                     "Pirelli C1\u2013C5 compounds (C6 removed, narrower construction), "
-                    "768 kg minimum car weight, ~30% downforce reduction, active "
+                    "768 kg minimum car weight (per published technical regulations), "
+                    "~15\u201330% downforce reduction, active "
                     "aerodynamics, 50/50 ICE/electric power split.",
                     className="methodology-text",
                 ),
@@ -548,10 +549,10 @@ welcome_content = html.Div(
                     "\u03b3\u00b7lap\u00b2, where \u03b1 is the baseline lap time for "
                     "a given compound, \u03b2 captures linear degradation, and \u03b3 "
                     "captures the accelerating degradation (\"cliff\") observed in longer "
-                    "stints. This quadratic form represents three phases of tire behavior: "
-                    "initial warm-up, a linear working range, and nonlinear performance "
-                    "falloff as the tire surface degrades beyond its thermal operating "
-                    "window.",
+                    "stints. The linear term dominates early in a stint while the quadratic "
+                    "term becomes significant as tire age increases, producing the nonlinear "
+                    "performance falloff that teams observe when tires exceed their thermal "
+                    "operating window.",
                     className="methodology-text",
                 ),
                 html.Div(
