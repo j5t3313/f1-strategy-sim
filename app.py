@@ -534,28 +534,117 @@ welcome_content = html.Div(
         ),
         html.Div(
             [
+                html.Div("2026 Regulations", className="methodology-heading"),
                 html.P(
-                    "2026 regulation updates: 70 kg fuel load (sustainable fuel, "
-                    "lower energy density), Pirelli C1\u2013C5 compounds (C6 removed, "
-                    "narrower construction), 768 kg minimum car weight, ~30% downforce "
-                    "reduction, active aerodynamics, 50/50 ICE/electric power split.",
-                    style={"marginBottom": "8px"},
+                    "70 kg fuel load (sustainable fuel, lower energy density), "
+                    "Pirelli C1\u2013C5 compounds (C6 removed, narrower construction), "
+                    "768 kg minimum car weight, ~30% downforce reduction, active "
+                    "aerodynamics, 50/50 ICE/electric power split.",
+                    className="methodology-text",
+                ),
+                html.Div("Tire Degradation Model", className="methodology-heading"),
+                html.P(
+                    "Lap times are modeled as \u03bc = \u03b1 + \u03b2\u00b7lap + "
+                    "\u03b3\u00b7lap\u00b2, where \u03b1 is the baseline lap time for "
+                    "a given compound, \u03b2 captures linear degradation, and \u03b3 "
+                    "captures the accelerating degradation (\"cliff\") observed in longer "
+                    "stints. This quadratic form represents three phases of tire behavior: "
+                    "initial warm-up, a linear working range, and nonlinear performance "
+                    "falloff as the tire surface degrades beyond its thermal operating "
+                    "window.",
+                    className="methodology-text",
+                ),
+                html.Div(
+                    "Bayesian Inference & Prior/Posterior Modes",
+                    className="methodology-heading",
+                ),
+                html.P([
+                    "When FP2 (or other session) data is available, the model parameters "
+                    "{\u03b1, \u03b2, \u03b3, \u03c3} are estimated via Markov Chain Monte "
+                    "Carlo (MCMC) using the No-U-Turn Sampler (NUTS). This produces a "
+                    "posterior distribution over parameters that reflects both the data and "
+                    "the prior beliefs about plausible degradation rates. When no session "
+                    "data is available, the simulator draws from ",
+                    html.Em("informative priors"),
+                    " calibrated against historical compound-specific degradation ranges "
+                    "(e.g., soft tires degrade faster than hards). This is a single unified "
+                    "model structure \u2014 there is no separate \"physics fallback.\" Sparse "
+                    "data partially updates the prior; abundant data dominates it. This is "
+                    "standard Bayesian behavior and means sprint weekends (FP1-only, shorter "
+                    "stints) produce wider but still useful posteriors.",
+                ], className="methodology-text"),
+                html.Div(
+                    "Epistemic vs. Aleatoric Uncertainty",
+                    className="methodology-heading",
                 ),
                 html.P(
-                    "Tire degradation uses a quadratic model (\u03b1 + \u03b2\u00b7lap "
-                    "+ \u03b3\u00b7lap\u00b2) with compound-specific informative priors. "
-                    "When trained posterior samples are available, parameters are drawn "
-                    "from the posterior; otherwise from priors informed by historical "
-                    "degradation ranges. Parameters are drawn once per simulation per "
-                    "compound (epistemic uncertainty), while lap-to-lap noise follows "
-                    "an AR(1) process with autocorrelation parameter \u03c1 (aleatoric "
-                    "uncertainty).",
+                    "The simulator separates two types of uncertainty. Epistemic uncertainty "
+                    "(we don't know the true degradation rate) is handled by drawing one set "
+                    "of parameters {\u03b1, \u03b2, \u03b3, \u03c3, \u03c1} per compound per "
+                    "simulation. Different simulations explore different plausible degradation "
+                    "curves. Aleatoric uncertainty (inherent lap-to-lap randomness even if the "
+                    "true rate were known) is handled by an AR(1) noise process within each "
+                    "simulation: \u03b5\u2081 ~ Normal(0, \u03c3) and \u03b5\u209c ~ "
+                    "Normal(\u03c1\u00b7\u03b5\u209c\u208b\u2081, \u03c3\u221a(1 \u2212 "
+                    "\u03c1\u00b2)). The autocorrelation parameter \u03c1 captures the "
+                    "empirical observation that a slow lap tends to be followed by another "
+                    "slow lap. The AR(1) process resets at stint boundaries (tire changes). "
+                    "This separation matters: collapsing both into a single noise term (as "
+                    "many simpler models do) produces artificially wide distributions that "
+                    "overstate strategy differentiation uncertainty.",
+                    className="methodology-text",
+                ),
+                html.Div("Fuel Correction", className="methodology-heading"),
+                html.P(
+                    "Raw lap times are adjusted for fuel load: Laptime(FC) = Laptime \u2212 "
+                    "(Total_Laps \u2212 Current_Lap) \u00d7 Fuel_Per_Lap \u00d7 Weight_Effect. "
+                    "The 2026 regulations specify 70 kg total fuel with 3 kg reserve, giving "
+                    "67 kg usable fuel distributed across race laps. The weight effect is fixed "
+                    "at 0.03 s/kg/lap \u2014 a documented simplification, as the true value "
+                    "varies with circuit corner profile and downforce level.",
+                    className="methodology-text",
+                ),
+                html.Div("Monte Carlo Simulation", className="methodology-heading"),
+                html.P(
+                    "Each simulation run draws a base pace perturbation ~ Normal(0, 0.4s) "
+                    "representing session-level variation (setup, conditions), then one "
+                    "parameter set per compound from the posterior (or prior). For each lap, "
+                    "the tire model produces a predicted time, fuel correction is applied, and "
+                    "AR(1) noise is added. Pit stops incur a circuit-specific time penalty. "
+                    "Running 100\u20132000 simulations per strategy produces empirical "
+                    "distributions of total race time, from which percentile-based risk "
+                    "metrics, median performance comparisons, and head-to-head win rate "
+                    "calculations are derived.",
+                    className="methodology-text",
+                ),
+                html.Div("Data Pipeline", className="methodology-heading"),
+                html.P(
+                    "A separate pipeline script (fit_models.py) ingests practice session data "
+                    "via the FastF1 API, extracts stints, filters outlaps and anomalous laps, "
+                    "fuel-corrects the times, and fits the quadratic Bayesian model per "
+                    "compound via MCMC. The AR(1) autocorrelation parameter \u03c1 is estimated "
+                    "post-hoc from model residuals. Posterior samples are serialized and loaded "
+                    "by the web app at startup. The intended workflow is: practice session ends "
+                    "\u2192 run pipeline \u2192 commit updated model files \u2192 redeploy.",
+                    className="methodology-text",
+                ),
+                html.Div("Known Limitations", className="methodology-heading"),
+                html.P(
+                    "The quadratic degradation form is parametric and does not capture complex "
+                    "thermal or chemical dynamics. The weight effect (0.03 s/kg/lap) is fixed "
+                    "across circuits. Prior parameters are informed by historical ranges but "
+                    "not hierarchically fit across circuits. \u03c1 is estimated from residuals "
+                    "rather than jointly within the MCMC. Base pace variance (0.4s) is not "
+                    "empirically derived from session data. No modeling of track evolution, "
+                    "traffic, weather, safety cars, or driver-specific performance.",
+                    className="methodology-text",
                 ),
             ],
             className="welcome-detail",
         ),
     ],
     id="welcome-section",
+    className="welcome-container",
 )
 
 main_content = html.Div(
