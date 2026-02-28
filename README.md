@@ -12,7 +12,7 @@ Tire performance follows a quadratic degradation form:
 mu = alpha + beta * lap + gamma * lap^2
 ```
 
-The quadratic term captures the three phases of tire life: initial warm-up, linear working phase, and accelerating cliff degradation. Parameters {alpha, beta, gamma, sigma, rho} are compound-specific.
+The quadratic term captures two regimes of tire degradation: linear wear that dominates early in a stint, and accelerating cliff degradation as tire age increases. Parameters {alpha, beta, gamma, sigma, rho} are compound-specific.
 
 When trained posterior samples exist for a circuit-compound pair (from MCMC inference on historical stint data), parameters are drawn from the posterior distribution. Otherwise, parameters are drawn from informative priors calibrated against historical compound degradation ranges. Both modes use the same model structure; the prior represents the state of belief before observing circuit-specific data.
 
@@ -50,8 +50,8 @@ Results are aggregated across simulations to produce empirical distributions for
 
 - 70 kg fuel load, sustainable fuel with lower energy density
 - Pirelli C1-C5 compounds (C6 removed), narrower construction
-- 768 kg minimum car weight (down from 798 kg)
-- ~30% downforce reduction, ~55% drag reduction
+- 768 kg minimum car weight, per published technical regulations (down from 798 kg)
+- ~15-30% downforce reduction, ~55% drag reduction
 - Active aerodynamics replacing DRS
 - 50/50 ICE/electric power split, MGU-H removed, MGU-K tripled to 350 kW
 - 24 races: Imola removed, Madrid added
@@ -118,6 +118,12 @@ This will:
 4. Commit the updated pickle file and redeploy
 5. App switches from "Prior model" to "Posterior model" for that circuit
 
+### Automated Updates via GitHub Actions
+
+A workflow in `.github/workflows/update-models.yml` automates the pipeline. Go to the Actions tab, select "Update Tire Models," choose the circuit and session from the dropdowns, and run. The workflow installs pipeline dependencies, runs `fit_models.py`, commits the updated model files, and pushes. Railway redeploys automatically on the new commit.
+
+Requires write permissions for Actions: Settings → Actions → General → Workflow permissions → "Read and write permissions."
+
 ### Available circuits
 
 ```
@@ -137,7 +143,7 @@ FP2 fuel loads are unknown. The pipeline assumes teams start long runs at approx
 - Weight effect coefficient (0.03 s/kg) is fixed across circuits; in practice it varies with corner speed profile
 - Prior parameters are informed by historical ranges but not formally fit to pre-2026 data via hierarchical pooling (planned for Phase 2 after 2026 race data becomes available)
 - No modeling of track evolution, safety car, traffic, or weather
-- AR(1) autocorrelation parameter rho is drawn from a prior; estimation from data requires per-lap residual analysis not yet implemented
+- AR(1) autocorrelation parameter rho is estimated post-hoc from model residuals rather than jointly within the MCMC; a fully Bayesian treatment would include rho in the generative model
 - Base pace sigma (0.4s) represents inter-simulation variation but is not estimated from historical session-to-session variance
 
 ## Contact
