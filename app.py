@@ -848,7 +848,6 @@ def render_tire_ages(soft_sets, medium_sets, hard_sets):
     Output("tire-allocation-store", "data"),
     Input({"type": "tire-age", "compound": ALL, "set": ALL}, "value"),
     State({"type": "tire-age", "compound": ALL, "set": ALL}, "id"),
-    prevent_initial_call=True,
 )
 def sync_tire_allocation(ages, ids):
     if not ages or not ids:
@@ -972,7 +971,6 @@ def render_strategy_editor(toggle, circuit, strategies):
     State({"type": "stint-laps", "idx": ALL}, "id"),
     State({"type": "stint-total", "idx": ALL}, "id"),
     State("circuit-dropdown", "value"),
-    prevent_initial_call=True,
 )
 def update_stint_totals(lap_values, lap_ids, total_ids, circuit):
     if not circuit or not lap_values or not total_ids:
@@ -1012,7 +1010,6 @@ def update_stint_totals(lap_values, lap_ids, total_ids, circuit):
     State({"type": "stint-compound", "idx": ALL}, "id"),
     State({"type": "stint-laps", "idx": ALL}, "id"),
     State("strategy-dropdown", "value"),
-    prevent_initial_call=True,
 )
 def sync_custom_strategies(compounds, laps, compound_ids, lap_ids, strategies):
     if not strategies or not compounds or not laps:
@@ -1061,12 +1058,16 @@ def update_strategy_display(circuit, strategies, editor_toggle, custom_data):
     for name in strategies:
         if use_custom and name in custom_data:
             scaled = custom_data[name]
+            compounds = "-".join(s["compound"][0] for s in scaled)
+            stops = len(scaled) - 1
+            label = f"{stops}-Stop: {compounds}"
         else:
             scaled = scale_strategy(ALL_STRATEGIES[name], circuit_laps)
+            label = name
         cards.append(
             html.Div(
                 [
-                    html.Div(name, className="strategy-card-name"),
+                    html.Div(label, className="strategy-card-name"),
                     make_stint_sequence(scaled),
                 ],
                 className="strategy-card",
@@ -1115,13 +1116,17 @@ def run_simulation(n_clicks, circuit, strategies, pace, pit, sims,
     for name in strategies:
         if use_custom and name in custom_data:
             strategy = custom_data[name]
+            compounds = "-".join(s["compound"][0] for s in strategy)
+            stops = len(strategy) - 1
+            label = f"{stops}-Stop: {compounds}"
         else:
             strategy = scale_strategy(ALL_STRATEGIES[name], circuit_laps)
+            label = name
 
         total_strat_laps = sum(s["laps"] for s in strategy)
         if total_strat_laps != circuit_laps:
             errors.append(
-                f"{name}: total laps ({total_strat_laps}) != circuit ({circuit_laps})"
+                f"{label}: total laps ({total_strat_laps}) != circuit ({circuit_laps})"
             )
             continue
 
@@ -1129,9 +1134,9 @@ def run_simulation(n_clicks, circuit, strategies, pace, pit, sims,
             times = simulator.simulate(
                 circuit, strategy, tire_allocation, pace, pit, sims,
             )
-            results[name] = times.tolist()
+            results[label] = times.tolist()
         except Exception as e:
-            errors.append(f"{name}: {str(e)}")
+            errors.append(f"{label}: {str(e)}")
 
     if errors:
         status = html.Div(
