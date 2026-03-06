@@ -59,6 +59,8 @@ jobs:
 
       - run: pip install -r requirements-pipeline.txt
 
+      - run: mkdir -p .f1_cache
+
       - run: python fit_models.py ${{ inputs.circuit }} --year ${{ inputs.year }} --session ${{ inputs.session }}
 
       - uses: actions/upload-artifact@v4
