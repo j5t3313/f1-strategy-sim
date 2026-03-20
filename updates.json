@@ -1,4 +1,17 @@
 [
-  {"date": "2026-04-12", "text": "Bahrain GP cancelled", "type": "info"},
-  {"date": "2026-04-19", "text": "Saudi Arabian GP cancelled", "type": "info"}
+  {
+    "date": "2026-04-12",
+    "text": "Bahrain GP cancelled",
+    "type": "info"
+  },
+  {
+    "date": "2026-04-19",
+    "text": "Saudi Arabian GP cancelled",
+    "type": "info"
+  },
+  {
+    "date": "2026-03-20",
+    "text": "Posterior model updated for China using FP1 2026 data",
+    "type": "model"
+  }
 ]
