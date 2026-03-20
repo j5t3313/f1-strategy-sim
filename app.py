@@ -4,6 +4,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
+import json
 import pickle
 import os
 from pathlib import Path
@@ -141,6 +142,18 @@ PACE_SIGMA = 0.4
 
 STRATEGY_COLORS = ["#e10600", "#0090ff", "#22c55e", "#ff8700", "#a855f7"]
 COMPOUND_COLORS = {"SOFT": "#dc2626", "MEDIUM": "#ca8a04", "HARD": "#6b7280"}
+
+UPDATES_FILE = Path("updates.json")
+
+
+def load_updates():
+    if not UPDATES_FILE.exists():
+        return []
+    try:
+        with open(UPDATES_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return []
 
 
 class F1StrategySimulator:
@@ -518,6 +531,39 @@ sidebar = html.Div(
     className="sidebar",
 )
 
+def build_updates_section():
+    updates = load_updates()
+    if not updates:
+        return html.Div(style={"display": "none"})
+    items = []
+    for entry in reversed(updates):
+        date_str = entry.get("date", "")
+        text = entry.get("text", "")
+        entry_type = entry.get("type", "manual")
+        badge_class = (
+            "update-badge-model" if entry_type == "model"
+            else "update-badge-info"
+        )
+        badge_text = "MODEL" if entry_type == "model" else "INFO"
+        items.append(
+            html.Div(
+                [
+                    html.Span(badge_text, className=f"update-badge {badge_class}"),
+                    html.Span(date_str, className="update-date"),
+                    html.Span(text, className="update-text"),
+                ],
+                className="update-item",
+            )
+        )
+    return html.Div(
+        [
+            html.Div("Updates", className="methodology-heading"),
+            html.Div(items, className="updates-list"),
+        ],
+        className="updates-section",
+    )
+
+
 welcome_content = html.Div(
     [
         html.Div("F1 Strategy Simulator", className="welcome-title"),
@@ -532,6 +578,7 @@ welcome_content = html.Div(
             "adjust simulation parameters, and run the analysis.",
             className="welcome-text",
         ),
+        build_updates_section(),
         html.Div(
             [
                 html.Div("2026 Regulations", className="methodology-heading"),

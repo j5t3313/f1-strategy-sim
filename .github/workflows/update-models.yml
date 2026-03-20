@@ -63,6 +63,28 @@ jobs:
 
       - run: python fit_models.py ${{ inputs.circuit }} --year ${{ inputs.year }} --session ${{ inputs.session }}
 
+      - name: Log model update
+        run: |
+          python -c "
+          import json
+          from datetime import datetime, timezone
+          from fit_models import CIRCUIT_LOOKUP
+          updates_file = 'updates.json'
+          try:
+              with open(updates_file) as f:
+                  updates = json.load(f)
+          except (FileNotFoundError, json.JSONDecodeError):
+              updates = []
+          name = CIRCUIT_LOOKUP.get('${{ inputs.circuit }}', '${{ inputs.circuit }}')
+          updates.append({
+              'date': datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+              'text': f'Posterior model updated for {name} using ${{ inputs.session }} ${{ inputs.year }} data',
+              'type': 'model'
+          })
+          with open(updates_file, 'w') as f:
+              json.dump(updates, f, indent=2)
+          "
+
       - uses: actions/upload-artifact@v4
         with:
           name: model-${{ inputs.circuit }}-${{ inputs.session }}
@@ -72,6 +94,6 @@ jobs:
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add prebuilt_models/
+          git add prebuilt_models/ updates.json
           git diff --cached --quiet || git commit -m "Update ${{ inputs.circuit }} models from ${{ inputs.session }} ${{ inputs.year }}"
           git push
