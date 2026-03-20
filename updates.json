@@ -1,5 +1,10 @@
 [
   {
+    "date": "2026-03-05",
+    "text": "Posterior model updated for Australia using FP2 2026 data",
+    "type": "model"
+  }
+  {
     "date": "2026-04-12",
     "text": "Bahrain GP cancelled",
     "type": "info"
