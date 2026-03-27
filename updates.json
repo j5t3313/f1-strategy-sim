@@ -18,5 +18,10 @@
     "date": "2026-04-19",
     "text": "Saudi Arabian GP cancelled",
     "type": "info"
+  },
+  {
+    "date": "2026-03-27",
+    "text": "Posterior model updated for Japan using FP2 2026 data",
+    "type": "model"
   }
 ]
