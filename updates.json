@@ -23,5 +23,10 @@
     "date": "2026-03-27",
     "text": "Posterior model updated for Japan using FP2 2026 data",
     "type": "model"
+  },
+  {
+    "date": "2026-05-01",
+    "text": "Posterior model updated for Miami using FP1 2026 data",
+    "type": "model"
   }
 ]
