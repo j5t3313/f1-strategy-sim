@@ -186,7 +186,7 @@ class F1StrategySimulator:
                 return True
         return False
 
-    def _draw_compound_params(self, compound, circuit_name):
+    def _draw_compound_params(self, compound, circuit_name, deg_multiplier=1.0):
         model_key = f"{circuit_name}_{compound}"
 
         if self.has_posteriors and model_key in self.posterior_models:
@@ -194,13 +194,13 @@ class F1StrategySimulator:
             idx = np.random.choice(len(samples["alpha"]))
 
             alpha = float(samples["alpha"][idx])
-            beta = float(samples["beta"][idx])
+            beta = float(samples["beta"][idx]) * deg_multiplier
 
             if "gamma" in samples and len(samples["gamma"]) > 0:
-                gamma = float(samples["gamma"][min(idx, len(samples["gamma"]) - 1)])
+                gamma = float(samples["gamma"][min(idx, len(samples["gamma"]) - 1)]) * deg_multiplier
             else:
                 p = COMPOUND_PRIORS[compound]["gamma"]
-                gamma = abs(np.random.normal(p["mu"], p["sigma"]))
+                gamma = abs(np.random.normal(p["mu"], p["sigma"])) * deg_multiplier
 
             sigma = float(samples["sigma"][idx])
 
@@ -227,10 +227,10 @@ class F1StrategySimulator:
             ),
             "beta": max(0.001, np.random.normal(
                 prior["beta"]["mu"], prior["beta"]["sigma"]
-            )),
+            )) * deg_multiplier,
             "gamma": abs(np.random.normal(
                 prior["gamma"]["mu"], prior["gamma"]["sigma"]
-            )),
+            )) * deg_multiplier,
             "sigma": max(0.01, abs(np.random.normal(
                 prior["sigma"]["mu"], prior["sigma"]["sigma"]
             ))),
@@ -281,7 +281,8 @@ class F1StrategySimulator:
         return True, ""
 
     def simulate(self, circuit, strategy, tire_allocation=None,
-                 base_pace=80.0, pit_loss=22.0, num_sims=1000):
+                 base_pace=80.0, pit_loss=22.0, num_sims=1000,
+                 deg_multiplier=1.0):
         num_sims = int(num_sims)
         total_laps = self.circuits[circuit]["laps"]
         fpl = self.fuel_per_lap(circuit)
@@ -297,7 +298,8 @@ class F1StrategySimulator:
         for sim in range(num_sims):
             sim_pace = base_pace + np.random.normal(0, PACE_SIGMA)
             compound_params = {
-                c: self._draw_compound_params(c, circuit) for c in compounds_used
+                c: self._draw_compound_params(c, circuit, deg_multiplier)
+                for c in compounds_used
             }
 
             race_time = 0.0
@@ -527,6 +529,16 @@ sidebar = html.Div(
             "RESET", id="reset-button",
             className="reset-button mt-2",
         ),
+        html.Hr(className="sidebar-divider"),
+        html.Div("SENSITIVITY ANALYSIS", className="sidebar-section-label"),
+        dbc.Button(
+            "RUN SENSITIVITY", id="sensitivity-button",
+            className="sensitivity-button", disabled=True,
+        ),
+        dcc.Loading(
+            html.Div(id="sensitivity-status", className="mt-2"),
+            type="circle", color="#e10600",
+        ),
     ],
     className="sidebar",
 )
@@ -676,6 +688,23 @@ welcome_content = html.Div(
                     "\u2192 run pipeline \u2192 commit updated model files \u2192 redeploy.",
                     className="methodology-text",
                 ),
+                html.Div("Sensitivity Analysis", className="methodology-heading"),
+                html.P(
+                    "After running the base simulation, a sensitivity analysis can be "
+                    "performed to test whether the strategy ranking is robust to input "
+                    "uncertainty. Two parameters are swept independently and jointly: "
+                    "pit loss (default \u00b14s in 0.5s steps) and a degradation multiplier "
+                    "(0.70x to 1.30x in 0.05 steps), which scales \u03b2 and \u03b3 together "
+                    "while preserving their ratio. These are the two highest-leverage "
+                    "inputs for strategy ranking: pit loss varies by circuit and is often "
+                    "misestimated, while degradation rates carry model uncertainty from "
+                    "limited practice data. A coarser 2D sweep maps which strategy is "
+                    "optimal across the joint parameter space. The output identifies "
+                    "crossover points where the optimal strategy changes, or confirms "
+                    "that the call is stable across the full range. This may take"
+                    "a minute or longer to run, depending on number of strategies.",
+                    className="methodology-text",
+                ),
                 html.Div("Known Limitations", className="methodology-heading"),
                 html.P(
                     "The quadratic degradation form is parametric and does not capture complex "
@@ -706,6 +735,11 @@ main_content = html.Div(
         ),
         dcc.Store(id="results-store"),
         dcc.Store(id="custom-strategy-store"),
+        dcc.Store(id="sensitivity-store"),
+        dcc.Loading(
+            html.Div(id="sensitivity-section"),
+            type="circle", color="#e10600",
+        ),
         dcc.Download(id="download-csv"),
         dcc.Download(id="download-summary"),
     ],
@@ -1475,13 +1509,448 @@ def toggle_welcome(circuit, strategies):
     Output("run-status", "children", allow_duplicate=True),
     Output("custom-tires-toggle", "value", allow_duplicate=True),
     Output("editor-toggle", "value", allow_duplicate=True),
+    Output("sensitivity-store", "data", allow_duplicate=True),
+    Output("sensitivity-status", "children", allow_duplicate=True),
     Input("reset-button", "n_clicks"),
     prevent_initial_call=True,
 )
 def reset_simulator(n_clicks):
     if not n_clicks:
         raise dash.exceptions.PreventUpdate
-    return None, None, None, "", [], []
+    return None, None, None, "", [], [], None, ""
+
+
+@app.callback(
+    Output("sensitivity-button", "disabled"),
+    Input("results-store", "data"),
+)
+def toggle_sensitivity_button(data):
+    return data is None
+
+
+def run_pit_loss_sweep(circuit, strategies_scaled, base_pace, default_pit,
+                       tire_allocation, sims_per_point=300):
+    pit_losses = np.arange(
+        max(12.0, default_pit - 4.0),
+        default_pit + 4.5,
+        0.5,
+    )
+    results = {name: [] for name in strategies_scaled}
+    for pl in pit_losses:
+        for name, strategy in strategies_scaled.items():
+            times = simulator.simulate(
+                circuit, strategy, tire_allocation, base_pace, pl, sims_per_point,
+            )
+            results[name].append({
+                "pit_loss": float(pl),
+                "median": float(np.median(times)),
+                "p5": float(np.percentile(times, 5)),
+                "p95": float(np.percentile(times, 95)),
+            })
+    return results, pit_losses.tolist()
+
+
+def run_deg_sweep(circuit, strategies_scaled, base_pace, pit_loss,
+                  tire_allocation, sims_per_point=300):
+    deg_multipliers = np.arange(0.70, 1.35, 0.05)
+    results = {name: [] for name in strategies_scaled}
+    for dm in deg_multipliers:
+        for name, strategy in strategies_scaled.items():
+            times = simulator.simulate(
+                circuit, strategy, tire_allocation, base_pace, pit_loss,
+                sims_per_point, deg_multiplier=dm,
+            )
+            results[name].append({
+                "deg_multiplier": float(dm),
+                "median": float(np.median(times)),
+                "p5": float(np.percentile(times, 5)),
+                "p95": float(np.percentile(times, 95)),
+            })
+    return results, deg_multipliers.tolist()
+
+
+def run_2d_sweep(circuit, strategies_scaled, base_pace, default_pit,
+                 tire_allocation, sims_per_point=200):
+    pit_losses = np.arange(
+        max(12.0, default_pit - 4.0),
+        default_pit + 4.5,
+        1.0,
+    )
+    deg_multipliers = np.arange(0.70, 1.35, 0.10)
+    grid = {}
+    for dm in deg_multipliers:
+        for pl in pit_losses:
+            medians = {}
+            for name, strategy in strategies_scaled.items():
+                times = simulator.simulate(
+                    circuit, strategy, tire_allocation, base_pace, pl,
+                    sims_per_point, deg_multiplier=dm,
+                )
+                medians[name] = float(np.median(times))
+            grid[f"{pl:.1f}_{dm:.2f}"] = medians
+    return grid, pit_losses.tolist(), deg_multipliers.tolist()
+
+
+def find_crossovers(sweep_results, param_key, strategy_names):
+    crossovers = []
+    param_vals = [r[param_key] for r in sweep_results[strategy_names[0]]]
+    for i in range(len(param_vals) - 1):
+        medians_a = {n: sweep_results[n][i]["median"] for n in strategy_names}
+        medians_b = {n: sweep_results[n][i + 1]["median"] for n in strategy_names}
+        best_a = min(medians_a, key=medians_a.get)
+        best_b = min(medians_b, key=medians_b.get)
+        if best_a != best_b:
+            val_a, val_b = param_vals[i], param_vals[i + 1]
+            gap_a = medians_a[best_b] - medians_a[best_a]
+            gap_b = medians_b[best_b] - medians_b[best_a]
+            if abs(gap_a - gap_b) > 1e-6:
+                frac = gap_a / (gap_a - gap_b)
+                crossover_val = val_a + frac * (val_b - val_a)
+            else:
+                crossover_val = (val_a + val_b) / 2
+            crossovers.append({
+                "param_value": round(crossover_val, 2),
+                "from_strategy": best_a,
+                "to_strategy": best_b,
+            })
+    return crossovers
+
+
+def build_sweep_figure(sweep_results, param_key, param_label, default_val,
+                       crossovers, strategy_names, circuit_name):
+    fig = go.Figure()
+    for i, name in enumerate(strategy_names):
+        data = sweep_results[name]
+        x = [d[param_key] for d in data]
+        y = [d["median"] for d in data]
+        p5 = [d["p5"] for d in data]
+        p95 = [d["p95"] for d in data]
+        color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+        r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+        fig.add_trace(go.Scatter(
+            x=x + x[::-1], y=p95 + p5[::-1],
+            fill="toself", fillcolor=f"rgba({r},{g},{b},0.08)",
+            line=dict(width=0), showlegend=False, hoverinfo="skip",
+        ))
+        fig.add_trace(go.Scatter(
+            x=x, y=y, name=name, mode="lines",
+            line=dict(color=color, width=2),
+        ))
+    fig.add_vline(
+        x=default_val, line_dash="dash", line_color="#9ca3af", line_width=1,
+    )
+    for cx in crossovers:
+        fig.add_vline(
+            x=cx["param_value"], line_dash="dot",
+            line_color="#d47264", line_width=1,
+        )
+    fig.update_layout(
+        **chart_layout(f"Strategy Sensitivity to {param_label} \u2014 {circuit_name}"),
+        xaxis_title=param_label, yaxis_title="Median Race Time (s)",
+    )
+    return fig
+
+
+def build_relative_figure(sweep_results, param_key, param_label, default_val,
+                          strategy_names, circuit_name):
+    fig = go.Figure()
+    n_points = len(sweep_results[strategy_names[0]])
+    best_at_point = []
+    for j in range(n_points):
+        medians = {n: sweep_results[n][j]["median"] for n in strategy_names}
+        best_at_point.append(min(medians.values()))
+    for i, name in enumerate(strategy_names):
+        data = sweep_results[name]
+        x = [d[param_key] for d in data]
+        y = [d["median"] - best_at_point[j] for j, d in enumerate(data)]
+        color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+        fig.add_trace(go.Scatter(
+            x=x, y=y, name=name, mode="lines",
+            line=dict(color=color, width=2),
+        ))
+    fig.add_vline(
+        x=default_val, line_dash="dash", line_color="#9ca3af", line_width=1,
+    )
+    fig.add_hline(y=0, line_color="#111827", line_width=0.8, opacity=0.3)
+    fig.update_layout(
+        **chart_layout(f"Delta to Fastest \u2014 {param_label} Sweep \u2014 {circuit_name}"),
+        xaxis_title=param_label, yaxis_title="Delta to Fastest (s)",
+    )
+    return fig
+
+
+def build_heatmap_figure(grid, pit_losses, deg_multipliers, strategy_names,
+                         default_pit, circuit_name):
+    baseline_medians = {}
+    for key in grid:
+        pl_str, dm_str = key.split("_")
+        if abs(float(dm_str) - 1.0) < 0.05:
+            closest_pl = min(pit_losses, key=lambda x: abs(x - default_pit))
+            if abs(float(pl_str) - closest_pl) < 0.5:
+                baseline_medians = grid[key]
+                break
+
+    if baseline_medians:
+        sorted_strats = sorted(
+            baseline_medians.keys(), key=lambda k: baseline_medians[k],
+        )
+        competitive = sorted_strats[:4]
+    else:
+        competitive = strategy_names[:4]
+
+    strat_to_idx = {name: i for i, name in enumerate(competitive)}
+    palette = ["#2066a8", "#8ec1da", "#f6d6c2", "#d47264"]
+
+    z = []
+    for dm in deg_multipliers:
+        row = []
+        for pl in pit_losses:
+            key = f"{pl:.1f}_{dm:.2f}"
+            if key in grid:
+                medians = {k: grid[key][k] for k in competitive if k in grid[key]}
+                if medians:
+                    best = min(medians, key=medians.get)
+                    row.append(strat_to_idx.get(best, 0))
+                else:
+                    row.append(0)
+            else:
+                row.append(0)
+        z.append(row)
+
+    fig = go.Figure(data=go.Heatmap(
+        z=z,
+        x=[f"{pl:.1f}" for pl in pit_losses],
+        y=[f"{dm:.2f}" for dm in deg_multipliers],
+        colorscale=[
+            [i / (len(competitive) - 1), palette[i]]
+            for i in range(len(competitive))
+        ],
+        zmin=0, zmax=len(competitive) - 1,
+        colorbar=dict(
+            tickvals=list(range(len(competitive))),
+            ticktext=competitive,
+            tickfont=dict(family="JetBrains Mono", size=10),
+        ),
+        hovertemplate="Pit Loss: %{x}s<br>Deg: %{y}x<br><extra></extra>",
+    ))
+    fig.update_layout(
+        **chart_layout(f"Optimal Strategy \u2014 {circuit_name}"),
+        xaxis_title="Pit Loss (s)", yaxis_title="Degradation Multiplier",
+    )
+    return fig
+
+
+@app.callback(
+    Output("sensitivity-store", "data"),
+    Output("sensitivity-status", "children"),
+    Input("sensitivity-button", "n_clicks"),
+    State("results-store", "data"),
+    State("circuit-dropdown", "value"),
+    State("strategy-dropdown", "value"),
+    State("base-pace-input", "value"),
+    State("pit-loss-input", "value"),
+    State("custom-tires-toggle", "value"),
+    State("tire-allocation-store", "data"),
+    State("editor-toggle", "value"),
+    State("custom-strategy-store", "data"),
+    prevent_initial_call=True,
+)
+def run_sensitivity(n_clicks, results_data, circuit, strategies, pace, pit,
+                    tire_toggle, tire_data, editor_toggle, custom_data):
+    if not results_data or not circuit or not strategies:
+        return None, ""
+
+    pace = float(pace or 80.0)
+    pit = float(pit or 22.0)
+
+    tire_allocation = None
+    if "on" in (tire_toggle or []) and tire_data:
+        tire_allocation = tire_data
+
+    circuit_laps = simulator.circuits[circuit]["laps"]
+    use_custom = "on" in (editor_toggle or []) and custom_data
+    gp_name = simulator.circuits[circuit]["gp_name"]
+
+    strategies_scaled = {}
+    for name in strategies:
+        if use_custom and name in custom_data:
+            strategy = custom_data[name]
+            compounds = "-".join(s["compound"][0] for s in strategy)
+            stops = len(strategy) - 1
+            label = f"{stops}-Stop: {compounds}"
+        else:
+            strategy = scale_strategy(ALL_STRATEGIES[name], circuit_laps)
+            label = name
+        total = sum(s["laps"] for s in strategy)
+        if total == circuit_laps:
+            strategies_scaled[label] = strategy
+
+    if not strategies_scaled:
+        return None, html.Div(
+            "No valid strategies",
+            style={"color": "#ef4444", "fontSize": "12px"},
+        )
+
+    pit_results, pit_vals = run_pit_loss_sweep(
+        circuit, strategies_scaled, pace, pit, tire_allocation, 300,
+    )
+    deg_results, deg_vals = run_deg_sweep(
+        circuit, strategies_scaled, pace, pit, tire_allocation, 300,
+    )
+    grid, grid_pit, grid_deg = run_2d_sweep(
+        circuit, strategies_scaled, pace, pit, tire_allocation, 200,
+    )
+
+    strategy_names = list(strategies_scaled.keys())
+    pit_crossovers = find_crossovers(pit_results, "pit_loss", strategy_names)
+    deg_crossovers = find_crossovers(deg_results, "deg_multiplier", strategy_names)
+
+    status = html.Div(
+        "Sensitivity complete",
+        style={
+            "color": "#22c55e", "fontSize": "12px",
+            "fontFamily": "JetBrains Mono",
+        },
+    )
+
+    return {
+        "pit_results": pit_results,
+        "deg_results": deg_results,
+        "grid": grid,
+        "pit_vals": pit_vals,
+        "deg_vals": deg_vals,
+        "grid_pit": grid_pit,
+        "grid_deg": grid_deg,
+        "pit_crossovers": pit_crossovers,
+        "deg_crossovers": deg_crossovers,
+        "strategy_names": strategy_names,
+        "default_pit": pit,
+        "circuit": circuit,
+        "gp_name": gp_name,
+    }, status
+
+
+@app.callback(
+    Output("sensitivity-section", "children"),
+    Input("sensitivity-store", "data"),
+)
+def display_sensitivity(data):
+    if not data:
+        return []
+
+    strategy_names = data["strategy_names"]
+    default_pit = data["default_pit"]
+    gp_name = data["gp_name"]
+    pit_results = data["pit_results"]
+    deg_results = data["deg_results"]
+    grid = data["grid"]
+    pit_crossovers = data["pit_crossovers"]
+    deg_crossovers = data["deg_crossovers"]
+
+    pit_fig = build_sweep_figure(
+        pit_results, "pit_loss", "Pit Loss (s)", default_pit,
+        pit_crossovers, strategy_names, gp_name,
+    )
+    pit_rel_fig = build_relative_figure(
+        pit_results, "pit_loss", "Pit Loss (s)", default_pit,
+        strategy_names, gp_name,
+    )
+    deg_fig = build_sweep_figure(
+        deg_results, "deg_multiplier", "Degradation Multiplier", 1.0,
+        deg_crossovers, strategy_names, gp_name,
+    )
+    deg_rel_fig = build_relative_figure(
+        deg_results, "deg_multiplier", "Degradation Multiplier", 1.0,
+        strategy_names, gp_name,
+    )
+    heatmap_fig = build_heatmap_figure(
+        grid, data["grid_pit"], data["grid_deg"],
+        strategy_names, default_pit, gp_name,
+    )
+
+    crossover_rows = []
+    for cx in pit_crossovers:
+        crossover_rows.append({
+            "Parameter": "Pit Loss",
+            "Value": f"{cx['param_value']}s",
+            "From": cx["from_strategy"],
+            "To": cx["to_strategy"],
+        })
+    for cx in deg_crossovers:
+        crossover_rows.append({
+            "Parameter": "Degradation",
+            "Value": f"{cx['param_value']}x",
+            "From": cx["from_strategy"],
+            "To": cx["to_strategy"],
+        })
+
+    crossover_section = []
+    if crossover_rows:
+        crossover_df = pd.DataFrame(crossover_rows)
+        crossover_section = [
+            html.Div("CROSSOVER POINTS", className="sidebar-section-label mt-4"),
+            dash_table.DataTable(
+                data=crossover_df.to_dict("records"),
+                columns=[{"name": c, "id": c} for c in crossover_df.columns],
+                style_header=TABLE_HEADER, style_cell=TABLE_CELL,
+                style_data_conditional=TABLE_CONDITIONAL,
+                style_table={"overflowX": "auto"},
+            ),
+        ]
+    else:
+        crossover_section = [
+            html.Div("CROSSOVER POINTS", className="sidebar-section-label mt-4"),
+            html.Div(
+                "No crossover points found. "
+                "The optimal strategy is stable across the full parameter range.",
+                className="sensitivity-stable-msg",
+            ),
+        ]
+
+    return html.Div([
+        html.Div("SENSITIVITY ANALYSIS", className="sidebar-section-label"),
+        html.Div([
+            dbc.Col(html.Div([
+                html.Div("PIT LOSS RANGE", className="metric-label"),
+                html.Div(
+                    f"{data['pit_vals'][0]:.0f}s \u2013 {data['pit_vals'][-1]:.0f}s",
+                    className="metric-value",
+                ),
+                html.Div(f"default: {default_pit}s", className="metric-sub"),
+            ], className="metric-card")),
+            dbc.Col(html.Div([
+                html.Div("DEGRADATION RANGE", className="metric-label"),
+                html.Div(
+                    f"{data['deg_vals'][0]:.2f}x \u2013 {data['deg_vals'][-1]:.2f}x",
+                    className="metric-value",
+                ),
+                html.Div("default: 1.00x", className="metric-sub"),
+            ], className="metric-card")),
+        ], className="d-flex gap-3 mb-4"),
+        dbc.Tabs([
+            dbc.Tab(
+                dcc.Graph(figure=pit_fig, config={"displayModeBar": False}),
+                label="Pit Loss",
+            ),
+            dbc.Tab(
+                dcc.Graph(figure=pit_rel_fig, config={"displayModeBar": False}),
+                label="Pit Loss (Relative)",
+            ),
+            dbc.Tab(
+                dcc.Graph(figure=deg_fig, config={"displayModeBar": False}),
+                label="Degradation",
+            ),
+            dbc.Tab(
+                dcc.Graph(figure=deg_rel_fig, config={"displayModeBar": False}),
+                label="Degradation (Relative)",
+            ),
+            dbc.Tab(
+                dcc.Graph(figure=heatmap_fig, config={"displayModeBar": False}),
+                label="2D Heatmap",
+            ),
+        ], className="mb-4"),
+        *crossover_section,
+    ])
 
 
 if __name__ == "__main__":
