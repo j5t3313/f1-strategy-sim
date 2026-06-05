@@ -38,6 +38,10 @@
     "date": "2026-05-22",
     "text": "Posterior model updated for Canada using FP1 2026 data",
     "type": "model"
+  },
+  {
+    "date": "2026-06-05",
+    "text": "Posterior model updated for Monaco using FP2 2026 data",
+    "type": "model"
   }
-  
 ]
