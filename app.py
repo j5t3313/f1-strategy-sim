@@ -135,7 +135,7 @@ COMPOUND_PRIORS = {
     },
 }
 
-FUEL_LOAD_KG = 70.0
+FUEL_LOAD_KG = 92.5
 FUEL_RESERVE_KG = 3.0
 WEIGHT_EFFECT_S_PER_KG = 0.03
 PACE_SIGMA = 0.4
@@ -595,11 +595,13 @@ welcome_content = html.Div(
             [
                 html.Div("2026 Regulations", className="methodology-heading"),
                 html.P(
-                    "70 kg fuel load (sustainable fuel, lower energy density), "
+                    "Energy-based fuel limit (3000 MJ/h flow cap replacing the former "
+                    "100 kg/h mass-flow rule, with no regulated starting fuel mass), "
+                    "sustainable fuel with lower energy density (38\u201341 MJ/kg), "
                     "Pirelli C1\u2013C5 compounds (C6 removed, narrower construction), "
                     "768 kg minimum car weight (per published technical regulations), "
-                    "~15\u201330% downforce reduction, active "
-                    "aerodynamics, 50/50 ICE/electric power split.",
+                    "~15\u201330% downforce reduction, active aerodynamics, "
+                    "50/50 ICE/electric power split.",
                     className="methodology-text",
                 ),
                 html.Div("Tire Degradation Model", className="methodology-heading"),
@@ -658,10 +660,15 @@ welcome_content = html.Div(
                 html.P(
                     "Raw lap times are adjusted for fuel load: Laptime(FC) = Laptime \u2212 "
                     "(Total_Laps \u2212 Current_Lap) \u00d7 Fuel_Per_Lap \u00d7 Weight_Effect. "
-                    "The 2026 regulations specify 70 kg total fuel with 3 kg reserve, giving "
-                    "67 kg usable fuel distributed across race laps. The weight effect is fixed "
-                    "at 0.03 s/kg/lap \u2014 a documented simplification, as the true value "
-                    "varies with circuit corner profile and downforce level.",
+                    "The 2026 regulations limit fuel by energy through a 3000 MJ/h flow cap "
+                    "rather than mandating a starting fuel mass, so there is no regulated race "
+                    "fuel quantity. The simulator uses a representative observed start-of-race "
+                    "load of 92.5 kg with a 3 kg reserve, giving 89.5 kg usable distributed "
+                    "across race laps. The lower energy density of the 2026 sustainable fuel "
+                    "means cars carry more mass for a given race energy than the early 70 kg "
+                    "projections suggested. The weight effect is fixed at 0.03 s/kg/lap, a "
+                    "documented simplification, since the true value varies with circuit corner "
+                    "profile and downforce level.",
                     className="methodology-text",
                 ),
                 html.Div("Monte Carlo Simulation", className="methodology-heading"),
