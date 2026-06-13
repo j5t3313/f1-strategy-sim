@@ -48,5 +48,11 @@
     "date": "2026-06-12",
     "text": "Posterior model updated for Barcelona-Catalunya using FP2 2026 data",
     "type": "model"
-  }
+  },
+  {
+  "date": "2026-06-13",
+  "type": "manual",
+  "summary": "Fuel load revised from 70 kg to 92.5 kg",
+  "detail": "2026 imposes no regulated starting fuel mass; the fuel limit is energy-based (3000 MJ/h flow cap replacing the old 100 kg/h rule). The lower energy density of the sustainable fuel (38-41 MJ/kg) means real start-of-race loads run higher than the early 70 kg projection. Revised to a representative observed load of 92.5 kg following practitioner feedback. The fuel correction applies an identical per-lap offset to every strategy, so this shifts absolute race times only; relative comparisons, win rates, and risk metrics are unchanged."
+}
 ]
