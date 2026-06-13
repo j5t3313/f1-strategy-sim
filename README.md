@@ -35,7 +35,7 @@ The autocorrelation parameter rho captures the empirical observation that consec
 correction = (total_laps - current_lap) * fuel_per_lap * weight_effect
 ```
 
-Fuel load: 70 kg race allowance (67 kg usable after 3 kg reserve), reflecting 2026 sustainable fuel regulations with lower energy density (38-41 MJ/kg). Weight effect fixed at 0.03 s/kg/lap.
+Fuel load is not regulated as a starting mass in 2026. The fuel limit is energy-based: a 3000 MJ/h flow cap replaces the former 100 kg/h mass-flow rule, with no mandated race fuel quantity. The simulator uses a representative observed start-of-race load of 92.5 kg (89.5 kg usable after 3 kg reserve). The 2026 sustainable fuel has lower energy density (38-41 MJ/kg), so cars carry more mass for a given race energy than the early 70 kg projections suggested. Weight effect fixed at 0.03 s/kg/lap.
 
 ### Monte Carlo Engine
 
@@ -48,7 +48,7 @@ Results are aggregated across simulations to produce empirical distributions for
 
 ## 2026 Regulations
 
-- 70 kg fuel load, sustainable fuel with lower energy density
+- Energy-based fuel limit: 3000 MJ/h flow cap (no regulated starting fuel mass), sustainable fuel with lower energy density (38-41 MJ/kg)
 - Pirelli C1-C5 compounds (C6 removed), narrower construction
 - 768 kg minimum car weight, per published technical regulations (down from 798 kg)
 - ~15-30% downforce reduction, ~55% drag reduction
@@ -94,7 +94,7 @@ python fit_models.py australia --year 2026 --session FP2
 This will:
 1. Load the FP2 session via FastF1
 2. Extract stint data, filter outlaps/inlaps/slow laps, require minimum 4-lap stints
-3. Fuel-correct lap times (assumes ~60% fuel load for FP2 runs)
+3. Fuel-correct lap times (assumes ~60% of a 92.5 kg load for FP2 runs)
 4. Fit the quadratic Bayesian model per compound via MCMC (NUTS sampler)
 5. Estimate AR(1) autocorrelation from residuals
 6. Save posterior samples to `prebuilt_models/{circuit}_models.pkl`
@@ -122,7 +122,7 @@ This will:
 
 A workflow in `.github/workflows/update-models.yml` automates the pipeline. Go to the Actions tab, select "Update Tire Models," choose the circuit and session from the dropdowns, and run. The workflow installs pipeline dependencies, runs `fit_models.py`, commits the updated model files, and pushes. Railway redeploys automatically on the new commit.
 
-Requires write permissions for Actions: Settings → Actions → General → Workflow permissions → "Read and write permissions."
+Requires write permissions for Actions: Settings -> Actions -> General -> Workflow permissions -> "Read and write permissions."
 
 ### Available circuits
 
@@ -135,7 +135,7 @@ mexico, brazil, las_vegas, qatar, abu_dhabi
 
 ### Fuel Correction Assumptions
 
-FP2 fuel loads are unknown. The pipeline assumes teams start long runs at approximately 60% of race fuel (42 kg). This is a reasonable midpoint; actual loads vary by team and run plan. The intercept parameter (alpha) absorbs most fuel-related baseline shift, so moderate errors in assumed fuel load affect the absolute lap time level but not the degradation slope (beta, gamma) which is what the simulator primarily uses.
+FP2 fuel loads are unknown. The pipeline assumes teams start long runs at approximately 60% of race fuel (about 55 kg, against a 92.5 kg representative race load). This is a reasonable midpoint; actual loads vary by team and run plan. The intercept parameter (alpha) absorbs most fuel-related baseline shift, so moderate errors in assumed fuel load affect the absolute lap time level but not the degradation slope (beta, gamma) which is what the simulator primarily uses.
 
 ## Known Limitations
 
@@ -145,6 +145,11 @@ FP2 fuel loads are unknown. The pipeline assumes teams start long runs at approx
 - No modeling of track evolution, safety car, traffic, or weather
 - AR(1) autocorrelation parameter rho is estimated post-hoc from model residuals rather than jointly within the MCMC; a fully Bayesian treatment would include rho in the generative model
 - Base pace sigma (0.4s) represents inter-simulation variation but is not estimated from historical session-to-session variance
+- The 92.5 kg fuel load is a representative observed value, not a regulated or per-circuit figure; real loads vary by circuit, team, and run plan
+
+## Changelog
+
+- Fuel load revised from 70 kg to a representative observed start-of-race load of 92.5 kg. The 2026 regulations impose no mandated starting fuel mass; the limit is energy-based (3000 MJ/h flow cap), and the lower energy density of the sustainable fuel means real loads run higher than the early 70 kg projections. Revised following practitioner feedback on real-world fuel loads. The fuel correction applies an identical per-lap offset to every strategy, so this affects absolute race times but not relative strategy comparisons, win rates, or risk metrics.
 
 ## Contact
 
