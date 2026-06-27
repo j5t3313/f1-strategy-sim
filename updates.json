@@ -53,5 +53,10 @@
   "date": "2026-06-13",
   "text": "Fuel load revised from 70 kg to 92.5 kg (2026 fuel limit is energy-based, no mandated starting mass)",
   "type": "app"
-}
+},
+  {
+    "date": "2026-06-26",
+    "text": "Posterior model updated for Austria using FP2 2026 data",
+    "type": "model"
+  },
 ]
