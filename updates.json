@@ -63,5 +63,10 @@
     "date": "2026-07-16",
     "text": "Posterior model updated for Silverstone using FP1 2026 data",
     "type": "model"
+  },
+  {
+    "date": "2026-07-18",
+    "text": "Posterior model updated for Belgium using FP2 2026 data",
+    "type": "model"
   }
 ]
