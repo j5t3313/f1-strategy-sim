@@ -73,5 +73,10 @@
     "date": "2026-07-25",
     "text": "Posterior model updated for Hungary using FP2 2026 data",
     "type": "model"
+  },
+  {
+    "date": "2026-08-22",
+    "text": "Posterior model updated for Zandvoort (Netherlands) using FP1 2026 data",
+    "type": "model"
   }
 ]
