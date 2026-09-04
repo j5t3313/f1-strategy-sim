@@ -291,6 +291,8 @@ def fit_compound(df_compound, compound, circuit_name, num_warmup=500, num_sample
     rho_samples += np.random.normal(0, 0.05, num_samples)
     rho_samples = np.clip(rho_samples, 0.0, 0.9)
 
+    stint_laps_observed = df_compound["StintLap"].astype(int)
+
     result = {
         "samples": {
             "alpha": np.array(samples["alpha"]),
@@ -302,6 +304,10 @@ def fit_compound(df_compound, compound, circuit_name, num_warmup=500, num_sample
         "n_laps": len(df_compound),
         "n_stints": df_compound["StintID"].nunique(),
         "rho_point_estimate": rho,
+        "support": {
+            "min_lap": int(stint_laps_observed.min()),
+            "max_lap": int(stint_laps_observed.max()),
+        },
     }
 
     alpha_m = float(jnp.mean(samples["alpha"]))

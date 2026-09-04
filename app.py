@@ -38,60 +38,20 @@ CIRCUIT_DATA = [
 ]
 
 ALL_STRATEGIES = {
-    "1-Stop: M-H": [
-        {"compound": "MEDIUM", "laps": 20},
-        {"compound": "HARD", "laps": 24},
-    ],
-    "1-Stop: S-H": [
-        {"compound": "SOFT", "laps": 15},
-        {"compound": "HARD", "laps": 29},
-    ],
-    "1-Stop: H-M": [
-        {"compound": "HARD", "laps": 25},
-        {"compound": "MEDIUM", "laps": 19},
-    ],
-    "1-Stop: H-S": [
-        {"compound": "HARD", "laps": 31},
-        {"compound": "SOFT", "laps": 13},
-    ],
-    "2-Stop: S-M-H": [
-        {"compound": "SOFT", "laps": 12},
-        {"compound": "MEDIUM", "laps": 16},
-        {"compound": "HARD", "laps": 16},
-    ],
-    "2-Stop: M-M-H": [
-        {"compound": "MEDIUM", "laps": 15},
-        {"compound": "MEDIUM", "laps": 15},
-        {"compound": "HARD", "laps": 14},
-    ],
-    "2-Stop: M-M-S": [
-        {"compound": "MEDIUM", "laps": 16},
-        {"compound": "MEDIUM", "laps": 16},
-        {"compound": "SOFT", "laps": 12},
-    ],
-    "2-Stop: H-M-S": [
-        {"compound": "HARD", "laps": 16},
-        {"compound": "MEDIUM", "laps": 16},
-        {"compound": "SOFT", "laps": 12},
-    ],
-    "2-Stop: M-H-M": [
-        {"compound": "MEDIUM", "laps": 12},
-        {"compound": "HARD", "laps": 18},
-        {"compound": "MEDIUM", "laps": 14},
-    ],
-    "2-Stop: M-H-H": [
-        {"compound": "MEDIUM", "laps": 18},
-        {"compound": "HARD", "laps": 30},
-        {"compound": "HARD", "laps": 24},
-    ],
-    "2-Stop: S-H-M": [
-        {"compound": "SOFT", "laps": 15},
-        {"compound": "HARD", "laps": 35},
-        {"compound": "MEDIUM", "laps": 22},
-    ],
+    "1-Stop: M-H": ["MEDIUM", "HARD"],
+    "1-Stop: S-H": ["SOFT", "HARD"],
+    "1-Stop: H-M": ["HARD", "MEDIUM"],
+    "1-Stop: H-S": ["HARD", "SOFT"],
+    "2-Stop: S-M-H": ["SOFT", "MEDIUM", "HARD"],
+    "2-Stop: M-M-H": ["MEDIUM", "MEDIUM", "HARD"],
+    "2-Stop: M-M-S": ["MEDIUM", "MEDIUM", "SOFT"],
+    "2-Stop: H-M-S": ["HARD", "MEDIUM", "SOFT"],
+    "2-Stop: M-H-M": ["MEDIUM", "HARD", "MEDIUM"],
+    "2-Stop: M-H-H": ["MEDIUM", "HARD", "HARD"],
+    "2-Stop: S-H-M": ["SOFT", "HARD", "MEDIUM"],
 }
 
-CIRCUIT_BASE_PACES = {
+CIRCUIT_RACE_PACES = {
     "Australia": 84.0, "China": 97.0, "Japan": 94.0, "Bahrain": 95.0,
     "Saudi Arabia": 91.0, "Miami": 93.0, "Canada": 77.0, "Monaco": 78.0,
     "Barcelona-Catalunya": 80.0, "Austria": 69.0, "Britain": 90.0,
@@ -140,10 +100,48 @@ FUEL_RESERVE_KG = 3.0
 WEIGHT_EFFECT_S_PER_KG = 0.03
 PACE_SIGMA = 0.4
 
+MIN_STINT_LAPS = 5
+SUPPORT_CAP_MULT = 1.5
+EXTRAP_FLAG_FRAC = 1.0
+WINDOW_TOL_FRAC = 0.25
+DEFAULT_OBJECTIVE = "mean"
+MAX_PARTITION_EVALS = 400000
+
+COMPOUND_NOMINAL_LIFE = {"SOFT": 22, "MEDIUM": 45, "HARD": 60}
+
+FULL_FUEL_EFFECT_S = (FUEL_LOAD_KG - FUEL_RESERVE_KG) * WEIGHT_EFFECT_S_PER_KG
+
+BASE_PACE_FILE = Path("base_pace.json")
+
+
+def load_base_paces():
+    if not BASE_PACE_FILE.exists():
+        return {}
+    try:
+        with open(BASE_PACE_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def build_base_paces():
+    override = load_base_paces()
+    out = {}
+    for circuit, race_pace in CIRCUIT_RACE_PACES.items():
+        if circuit in override:
+            out[circuit] = float(override[circuit])
+        else:
+            out[circuit] = round(race_pace - FULL_FUEL_EFFECT_S, 1)
+    return out
+
+
+CIRCUIT_BASE_PACES = build_base_paces()
+
 STRATEGY_COLORS = ["#e10600", "#0090ff", "#22c55e", "#ff8700", "#a855f7"]
 COMPOUND_COLORS = {"SOFT": "#dc2626", "MEDIUM": "#ca8a04", "HARD": "#6b7280"}
 
 UPDATES_FILE = Path("updates.json")
+NOMINAL_LIFE_FILE = Path("tire_life.json")
 
 
 def load_updates():
@@ -156,12 +154,59 @@ def load_updates():
         return []
 
 
+def load_nominal_life():
+    if not NOMINAL_LIFE_FILE.exists():
+        return {}
+    try:
+        with open(NOMINAL_LIFE_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+CIRCUIT_NOMINAL_LIFE = load_nominal_life()
+
+
+def _sum1(n):
+    return n * (n + 1) / 2.0
+
+
+def _sum2(n):
+    return n * (n + 1) * (2 * n + 1) / 6.0
+
+
+def _range_sum1(lo, hi):
+    return _sum1(hi) - _sum1(lo - 1)
+
+
+def _range_sum2(lo, hi):
+    return _sum2(hi) - _sum2(lo - 1)
+
+
+def _iter_partitions(total, caps, min_stint):
+    n = len(caps)
+
+    def recurse(remaining, idx):
+        if idx == n - 1:
+            if min_stint <= remaining <= caps[idx]:
+                yield (remaining,)
+            return
+        floor = min_stint
+        ceil = min(caps[idx], remaining - min_stint * (n - idx - 1))
+        for length in range(floor, ceil + 1):
+            for tail in recurse(remaining - length, idx + 1):
+                yield (length,) + tail
+
+    yield from recurse(total, 0)
+
+
 class F1StrategySimulator:
 
     def __init__(self, models_dir="prebuilt_models"):
         self.models_dir = Path(models_dir)
         self.circuits = {name: data for name, data in CIRCUIT_DATA}
         self.posterior_models = {}
+        self._base_alpha_cache = {}
         self.has_posteriors = self._load_posterior_models()
 
     def _load_posterior_models(self):
@@ -185,6 +230,19 @@ class F1StrategySimulator:
             if f"{circuit_name}_{compound}" in self.posterior_models:
                 return True
         return False
+
+    def _circuit_base_alpha(self, circuit_name):
+        if circuit_name in self._base_alpha_cache:
+            return self._base_alpha_cache[circuit_name]
+        vals = []
+        for compound in ["SOFT", "MEDIUM", "HARD"]:
+            key = f"{circuit_name}_{compound}"
+            if key in self.posterior_models:
+                a = float(np.mean(self.posterior_models[key]["samples"]["alpha"]))
+                vals.append(a - COMPOUND_PRIORS[compound]["alpha_offset"]["mu"])
+        base = float(np.mean(vals)) if vals else CIRCUIT_BASE_PACES.get(circuit_name, 80.0)
+        self._base_alpha_cache[circuit_name] = base
+        return base
 
     def _draw_compound_params(self, compound, circuit_name, deg_multiplier=1.0):
         model_key = f"{circuit_name}_{compound}"
@@ -220,6 +278,30 @@ class F1StrategySimulator:
             }
 
         prior = COMPOUND_PRIORS[compound]
+
+        if self.has_posteriors and self.has_posterior(circuit_name):
+            base_alpha = self._circuit_base_alpha(circuit_name)
+            offset = np.random.normal(
+                prior["alpha_offset"]["mu"], prior["alpha_offset"]["sigma"]
+            )
+            return {
+                "mode": "posterior",
+                "alpha": base_alpha + offset,
+                "beta": max(0.001, np.random.normal(
+                    prior["beta"]["mu"], prior["beta"]["sigma"]
+                )) * deg_multiplier,
+                "gamma": abs(np.random.normal(
+                    prior["gamma"]["mu"], prior["gamma"]["sigma"]
+                )) * deg_multiplier,
+                "sigma": max(0.01, abs(np.random.normal(
+                    prior["sigma"]["mu"], prior["sigma"]["sigma"]
+                ))),
+                "rho": np.clip(
+                    np.random.normal(prior["rho"]["mu"], prior["rho"]["sigma"]),
+                    0.0, 0.9,
+                ),
+            }
+
         return {
             "mode": "prior",
             "alpha_offset": np.random.normal(
@@ -282,16 +364,23 @@ class F1StrategySimulator:
 
     def simulate(self, circuit, strategy, tire_allocation=None,
                  base_pace=80.0, pit_loss=22.0, num_sims=1000,
-                 deg_multiplier=1.0):
+                 deg_multiplier=1.0, pre_resolved=False):
         num_sims = int(num_sims)
         total_laps = self.circuits[circuit]["laps"]
         fpl = self.fuel_per_lap(circuit)
 
-        valid, msg = self.validate_allocation(strategy, tire_allocation)
-        if not valid:
-            raise ValueError(msg)
+        if pre_resolved:
+            enhanced = [
+                {"compound": s["compound"], "laps": s["laps"],
+                 "tire_age": s.get("tire_age", 0)}
+                for s in strategy
+            ]
+        else:
+            valid, msg = self.validate_allocation(strategy, tire_allocation)
+            if not valid:
+                raise ValueError(msg)
+            enhanced = self.assign_tires(strategy, tire_allocation)
 
-        enhanced = self.assign_tires(strategy, tire_allocation)
         compounds_used = list({s["compound"] for s in enhanced})
         results = np.zeros(num_sims)
 
@@ -345,9 +434,9 @@ class F1StrategySimulator:
                         )
 
                     fuel_correction = (
-                        (total_laps - current_lap) * fpl * WEIGHT_EFFECT_S_PER_KG
+                        (total_laps - current_lap + 1) * fpl * WEIGHT_EFFECT_S_PER_KG
                     )
-                    race_time += mu + epsilon - fuel_correction
+                    race_time += mu + epsilon + fuel_correction
                     current_lap += 1
 
                 if stint_idx < len(enhanced) - 1:
@@ -357,21 +446,210 @@ class F1StrategySimulator:
 
         return results
 
+    def _available_sets(self, tire_allocation):
+        if not tire_allocation:
+            return None
+        sets = {}
+        for t in tire_allocation:
+            sets.setdefault(t["compound"], []).append(int(t["age_laps"]))
+        for c in sets:
+            sets[c].sort()
+        return sets
 
-def scale_strategy(strategy, circuit_laps):
-    total_original = sum(s["laps"] for s in strategy)
-    factor = circuit_laps / total_original
-    scaled = []
-    remaining = circuit_laps
-    for i, stint in enumerate(strategy):
-        if i == len(strategy) - 1:
-            laps = remaining
+    def _resolve_ages(self, sequence, lengths, avail):
+        if avail is None:
+            return [0] * len(sequence)
+        pools = {c: list(ages) for c, ages in avail.items()}
+        ages = [None] * len(sequence)
+        by_compound = {}
+        for i, c in enumerate(sequence):
+            by_compound.setdefault(c, []).append(i)
+        for c, idxs in by_compound.items():
+            pool = pools.get(c, [])
+            if len(pool) < len(idxs):
+                raise ValueError(f"Need {len(idxs)} {c} sets, have {len(pool)}")
+            order = sorted(idxs, key=lambda i: (-lengths[i], i))
+            for rank, i in enumerate(order):
+                ages[i] = pool[rank]
+        return ages
+
+    def _fitted_support_max(self, compound, circuit):
+        key = f"{circuit}_{compound}"
+        if self.has_posteriors and key in self.posterior_models:
+            support = self.posterior_models[key].get("support")
+            if support and support.get("max_lap"):
+                return int(support["max_lap"])
+        return None
+
+    def _nominal_life(self, compound, circuit):
+        override = CIRCUIT_NOMINAL_LIFE.get(circuit, {})
+        if compound in override:
+            return int(override[compound])
+        return int(COMPOUND_NOMINAL_LIFE[compound])
+
+    def _compound_cap(self, compound, circuit, min_stint, total_laps):
+        cap = min(total_laps, self._nominal_life(compound, circuit))
+        fitted = self._fitted_support_max(compound, circuit)
+        if fitted is not None:
+            cap = min(cap, int(round(SUPPORT_CAP_MULT * fitted)))
+        return max(min_stint, cap)
+
+    def _mean_params(self, compound, circuit, base_pace, deg_multiplier):
+        key = f"{circuit}_{compound}"
+        if self.has_posteriors and key in self.posterior_models:
+            s = self.posterior_models[key]["samples"]
+            a = float(np.mean(s["alpha"]))
+            b = float(np.mean(s["beta"])) * deg_multiplier
+            g = float(np.mean(s["gamma"])) * deg_multiplier
+            return a, b, g, "posterior"
+        p = COMPOUND_PRIORS[compound]
+        if self.has_posteriors and self.has_posterior(circuit):
+            a = self._circuit_base_alpha(circuit) + p["alpha_offset"]["mu"]
         else:
-            laps = max(1, round(stint["laps"] * factor))
-            laps = min(laps, remaining - (len(strategy) - i - 1))
-            remaining -= laps
-        scaled.append({"compound": stint["compound"], "laps": laps})
-    return scaled
+            a = base_pace + p["alpha_offset"]["mu"]
+        b = p["beta"]["mu"] * deg_multiplier
+        g = p["gamma"]["mu"] * deg_multiplier
+        return a, b, g, "prior"
+
+    def expected_race_time(self, sequence, lengths, ages, mean_params, pit_loss):
+        total = 0.0
+        for i, compound in enumerate(sequence):
+            a, b, g, _ = mean_params[compound]
+            lo = ages[i] + 1
+            hi = ages[i] + lengths[i]
+            total += (
+                a * lengths[i]
+                + b * _range_sum1(lo, hi)
+                + g * _range_sum2(lo, hi)
+            )
+        total += pit_loss * (len(sequence) - 1)
+        return total
+
+    def _extrapolation_flags(self, sequence, lengths, circuit):
+        flags = []
+        for i, compound in enumerate(sequence):
+            nominal = self._nominal_life(compound, circuit)
+            fitted = self._fitted_support_max(compound, circuit)
+            ref = fitted if fitted is not None else nominal
+            flagged = lengths[i] >= EXTRAP_FLAG_FRAC * ref or lengths[i] >= nominal
+            flags.append({
+                "compound": compound,
+                "length": int(lengths[i]),
+                "max_lap": fitted,
+                "nominal_life": nominal,
+                "flagged": bool(flagged),
+            })
+        return flags
+
+    def resolve_fixed(self, circuit, sequence, lengths, tire_allocation=None):
+        avail = self._available_sets(tire_allocation)
+        ages = self._resolve_ages(sequence, lengths, avail)
+        resolved = [
+            {"compound": c, "laps": int(lengths[i]), "tire_age": int(ages[i])}
+            for i, c in enumerate(sequence)
+        ]
+        pit_laps = [int(x) for x in np.cumsum(lengths)[:-1]]
+        return {
+            "sequence": list(sequence),
+            "lengths": [int(x) for x in lengths],
+            "ages": [int(x) for x in ages],
+            "resolved": resolved,
+            "pit_laps": pit_laps,
+            "extrapolation": self._extrapolation_flags(sequence, lengths, circuit),
+        }
+
+    def optimize(self, circuit, sequence, tire_allocation=None, base_pace=80.0,
+                 pit_loss=22.0, deg_multiplier=1.0, objective=DEFAULT_OBJECTIVE,
+                 min_stint=MIN_STINT_LAPS):
+        total_laps = self.circuits[circuit]["laps"]
+        n = len(sequence)
+        avail = self._available_sets(tire_allocation)
+        if avail is not None:
+            need = {}
+            for c in sequence:
+                need[c] = need.get(c, 0) + 1
+            for c, k in need.items():
+                have = len(avail.get(c, []))
+                if have < k:
+                    raise ValueError(f"Need {k} {c} sets, have {have}")
+
+        caps = [
+            self._compound_cap(c, circuit, min_stint, total_laps) for c in sequence
+        ]
+        if sum(caps) < total_laps or min_stint * n > total_laps:
+            raise ValueError("no feasible pit split for this sequence")
+
+        mean_params = {
+            c: self._mean_params(c, circuit, base_pace, deg_multiplier)
+            for c in set(sequence)
+        }
+
+        best = None
+        surface = []
+        evals = 0
+        for lengths in _iter_partitions(total_laps, caps, min_stint):
+            evals += 1
+            if evals > MAX_PARTITION_EVALS:
+                raise ValueError("partition space too large to optimize")
+            ages = self._resolve_ages(sequence, lengths, avail)
+            t = self.expected_race_time(
+                sequence, lengths, ages, mean_params, pit_loss
+            )
+            pit_laps = tuple(int(x) for x in np.cumsum(lengths)[:-1])
+            surface.append((pit_laps, t))
+            if best is None or t < best["mean"]:
+                best = {"lengths": list(lengths), "ages": ages,
+                        "pit_laps": list(pit_laps), "mean": t}
+
+        resolved = [
+            {"compound": c, "laps": int(best["lengths"][i]),
+             "tire_age": int(best["ages"][i])}
+            for i, c in enumerate(sequence)
+        ]
+        return {
+            "sequence": list(sequence),
+            "lengths": [int(x) for x in best["lengths"]],
+            "ages": [int(x) for x in best["ages"]],
+            "resolved": resolved,
+            "pit_laps": [int(x) for x in best["pit_laps"]],
+            "closed_form_mean": float(best["mean"]),
+            "mode": mean_params[sequence[0]][3],
+            "extrapolation": self._extrapolation_flags(
+                sequence, best["lengths"], circuit
+            ),
+            "surface": surface,
+        }
+
+
+def pit_window_from_surface(surface, best_mean, tol):
+    eligible = [pt for pt, m in surface if m <= best_mean + tol]
+    if not eligible:
+        return None, 0
+    n_pits = len(eligible[0]) if eligible[0] else 0
+    box = []
+    for i in range(n_pits):
+        vals = [pt[i] for pt in eligible]
+        box.append([int(min(vals)), int(max(vals))])
+    return box, len(eligible)
+
+
+def default_partition(sequence, circuit):
+    circuit_laps = simulator.circuits[circuit]["laps"]
+    try:
+        opt = simulator.optimize(
+            circuit, sequence,
+            base_pace=CIRCUIT_BASE_PACES.get(circuit, 80.0),
+            pit_loss=CIRCUIT_PIT_LOSSES.get(circuit, 22.0),
+        )
+        return [{"compound": c, "laps": opt["lengths"][i]}
+                for i, c in enumerate(sequence)]
+    except Exception:
+        n = len(sequence)
+        base = circuit_laps // n
+        lengths = [base] * n
+        lengths[-1] = circuit_laps - base * (n - 1)
+        return [{"compound": c, "laps": lengths[i]}
+                for i, c in enumerate(sequence)]
 
 
 def make_stint_block(compound, laps):
@@ -388,6 +666,21 @@ def make_stint_sequence(strategy):
             elements.append(html.Span("\u2192", className="stint-arrow"))
         elements.append(make_stint_block(stint["compound"], stint["laps"]))
     return html.Div(elements, className="stint-sequence")
+
+
+def format_pit_laps(pit_laps):
+    if not pit_laps:
+        return "no stop"
+    return " / ".join(str(int(p)) for p in pit_laps)
+
+
+def format_window(window):
+    if not window:
+        return "\u2014"
+    parts = []
+    for lo, hi in window:
+        parts.append(str(lo) if lo == hi else f"{lo}\u2013{hi}")
+    return " / ".join(parts)
 
 
 def chart_layout(title=""):
@@ -580,14 +873,16 @@ welcome_content = html.Div(
     [
         html.Div("F1 Strategy Simulator", className="welcome-title"),
         html.P(
-            "Simulate and compare Formula 1 pit stop strategies using Bayesian "
-            "tire modeling and Monte Carlo simulation, updated for the 2026 "
-            "regulation era.",
+            "Solve, simulate, and compare Formula 1 pit stop strategies using "
+            "Bayesian tire modeling, closed-form pit-window optimization, and "
+            "Monte Carlo simulation, updated for the 2026 regulation era.",
             className="welcome-text",
         ),
         html.P(
-            "Select a circuit from the sidebar, choose strategies to compare, "
-            "adjust simulation parameters, and run the analysis.",
+            "Select a circuit, choose the compound sequences to compare, and run "
+            "the analysis. The simulator solves the optimal pit lap for each "
+            "sequence, reports the window of laps statistically equivalent to it, "
+            "and compares strategies at their own optima.",
             className="welcome-text",
         ),
         build_updates_section(),
@@ -658,17 +953,36 @@ welcome_content = html.Div(
                 ),
                 html.Div("Fuel Correction", className="methodology-heading"),
                 html.P(
-                    "Raw lap times are adjusted for fuel load: Laptime(FC) = Laptime \u2212 "
-                    "(Total_Laps \u2212 Current_Lap) \u00d7 Fuel_Per_Lap \u00d7 Weight_Effect. "
-                    "The 2026 regulations limit fuel by energy through a 3000 MJ/h flow cap "
-                    "rather than mandating a starting fuel mass, so there is no regulated race "
-                    "fuel quantity. The simulator uses a representative observed start-of-race "
-                    "load of 92.5 kg with a 3 kg reserve, giving 89.5 kg usable distributed "
-                    "across race laps. The lower energy density of the 2026 sustainable fuel "
-                    "means cars carry more mass for a given race energy than the early 70 kg "
+                    "The tire model is fit on fuel-corrected data, so alpha represents a "
+                    "zero-fuel lap time. The simulator reconstructs on-track pace by adding "
+                    "the fuel mass carried on each lap back in: Laptime = model_laptime + "
+                    "(Total_Laps \u2212 Current_Lap + 1) \u00d7 Fuel_Per_Lap \u00d7 Weight_Effect. "
+                    "Early laps carry the most fuel and are correctly the slowest for a given "
+                    "tire state, with the penalty falling to near zero on the final lap. The "
+                    "2026 regulations limit fuel by energy through a 3000 MJ/h flow cap rather "
+                    "than mandating a starting fuel mass, so there is no regulated race fuel "
+                    "quantity. The simulator uses a representative observed start-of-race load "
+                    "of 92.5 kg with a 3 kg reserve, giving 89.5 kg usable distributed across "
+                    "race laps. The lower energy density of the 2026 sustainable fuel means "
+                    "cars carry more mass for a given race energy than the early 70 kg "
                     "projections suggested. The weight effect is fixed at 0.03 s/kg/lap, a "
                     "documented simplification, since the true value varies with circuit corner "
-                    "profile and downforce level.",
+                    "profile and downforce level. Because the fuel term depends only on the "
+                    "race lap index, it is identical across every strategy and does not affect "
+                    "strategy ranking, win rates, or pit windows.",
+                    className="methodology-text",
+                ),
+                html.Div("Base Pace", className="methodology-heading"),
+                html.P(
+                    "In posterior mode the fitted alpha carries absolute pace per compound, so "
+                    "base pace is not used for a fitted compound. It anchors two cases: circuits "
+                    "with no fit, where it is the zero-fuel reference lap for a fresh medium, and "
+                    "circuits with a partial fit, where an unfit compound is anchored to a base "
+                    "pace derived from the fitted alphas so all compounds share one scale. "
+                    "Per-circuit values are held as representative race laps and converted to a "
+                    "zero-fuel reference by removing one full fuel load of lap time; a "
+                    "base_pace.json produced from fuel-corrected historical race pace overrides "
+                    "these with directly derived values.",
                     className="methodology-text",
                 ),
                 html.Div("Monte Carlo Simulation", className="methodology-heading"),
@@ -684,6 +998,55 @@ welcome_content = html.Div(
                     "calculations are derived.",
                     className="methodology-text",
                 ),
+                html.Div("Pit Window Optimization", className="methodology-heading"),
+                html.P(
+                    "A strategy is a compound sequence; the pit laps are solved rather "
+                    "than supplied. Expected race time is linear in the tire parameters, "
+                    "and the AR(1) noise, base pace perturbation, and fuel term either "
+                    "average out or depend only on the race lap index, so none of them "
+                    "can move the optimal stop. The expected-time surface over pit laps "
+                    "is therefore closed-form, and the optimizer scans the feasible "
+                    "stint-length partitions to find the minimum directly, with no "
+                    "simulation in the loop. Monte Carlo then runs at that optimum to "
+                    "produce the distribution and risk metrics. The reported window is "
+                    "the set of pit laps whose expected time falls within a fraction of "
+                    "the race-time standard deviation of the best, given as a lap range "
+                    "per stop. A wide window means the timing is forgiving; a narrow one "
+                    "means the stop must land on a specific lap.",
+                    className="methodology-text",
+                ),
+                html.Div("Tire Set Assignment", className="methodology-heading"),
+                html.P(
+                    "When custom tire allocation is enabled, each stint runs on a "
+                    "specific physical set with its own age, and the assignment of sets "
+                    "to stints is solved jointly with the pit laps. Within a compound the "
+                    "marginal cost of tire age rises with stint length, so assigning the "
+                    "freshest set to the longest stint minimizes total time. This is exact "
+                    "rather than heuristic, and it decomposes per compound since a set can "
+                    "only fill a stint of its own compound.",
+                    className="methodology-text",
+                ),
+                html.Div(
+                    "Tire Life and Extrapolation Limits",
+                    className="methodology-heading",
+                ),
+                html.P(
+                    "Each compound's stint length is bounded by the evidence available "
+                    "for it. In posterior mode the bound comes from the longest run "
+                    "observed in practice for that compound, extended by a modest margin, "
+                    "and in every mode it is also capped by a nominal race life per "
+                    "compound. The quadratic degradation curve is a reliable local "
+                    "description within the range it was fit on, and the bound keeps the "
+                    "optimizer from extrapolating it into stint lengths that no data "
+                    "supports. This matters most for the soft compound, whose practice "
+                    "running is short and low-fuel, which otherwise makes long soft "
+                    "stints look more viable than they are. Any solved stint that reaches "
+                    "or exceeds the observed range or the nominal life is flagged as "
+                    "extrapolation-limited, so the result is disclosed rather than hidden. "
+                    "Per-circuit tire life is derived from historical race stint lengths, "
+                    "with global defaults applied until that derivation is run.",
+                    className="methodology-text",
+                ),
                 html.Div("Data Pipeline", className="methodology-heading"),
                 html.P(
                     "A separate pipeline script (fit_models.py) ingests practice session data "
@@ -697,30 +1060,41 @@ welcome_content = html.Div(
                 ),
                 html.Div("Sensitivity Analysis", className="methodology-heading"),
                 html.P(
-                    "After running the base simulation, a sensitivity analysis can be "
-                    "performed to test whether the strategy ranking is robust to input "
-                    "uncertainty. Two parameters are swept independently and jointly: "
-                    "pit loss (default \u00b14s in 0.5s steps) and a degradation multiplier "
-                    "(0.70x to 1.30x in 0.05 steps), which scales \u03b2 and \u03b3 together "
-                    "while preserving their ratio. These are the two highest-leverage "
-                    "inputs for strategy ranking: pit loss varies by circuit and is often "
-                    "misestimated, while degradation rates carry model uncertainty from "
-                    "limited practice data. A coarser 2D sweep maps which strategy is "
-                    "optimal across the joint parameter space. The output identifies "
-                    "crossover points where the optimal strategy changes, or confirms "
-                    "that the call is stable across the full range. This may take"
-                    "a minute or longer to run, depending on number of strategies.",
+                    "After the base simulation, a sensitivity analysis tests whether the "
+                    "ranking is robust to input uncertainty. Two parameters are swept, "
+                    "independently and jointly: pit loss (default \u00b14s in 0.5s steps) "
+                    "and a degradation multiplier (0.70x to 1.30x in 0.05 steps) that "
+                    "scales \u03b2 and \u03b3 together while preserving their ratio. Every "
+                    "point in the sweep re-solves the optimal pit split for each strategy, "
+                    "so strategies are compared at their own optima throughout rather than "
+                    "at a fixed split, and because the optimization is closed-form this "
+                    "adds little cost. The pit loss and degradation tabs show median race "
+                    "time with the crossover points where the optimal strategy changes; "
+                    "the Optimal Pit Lap tab shows how each strategy's solved pit lap and "
+                    "its window respond to degradation. Pit loss changes which stop count "
+                    "is fastest overall, which appears as strategies trading rank rather "
+                    "than as pit laps moving, since the pit lap within a fixed sequence is "
+                    "degradation-driven. A coarser 2D sweep maps which strategy is optimal "
+                    "across the joint parameter space. This may take a minute or longer to "
+                    "run, depending on the number of strategies.",
                     className="methodology-text",
                 ),
                 html.Div("Known Limitations", className="methodology-heading"),
                 html.P(
-                    "The quadratic degradation form is parametric and does not capture complex "
-                    "thermal or chemical dynamics. The weight effect (0.03 s/kg/lap) is fixed "
-                    "across circuits. Prior parameters are informed by historical ranges but "
-                    "not hierarchically fit across circuits. \u03c1 is estimated from residuals "
-                    "rather than jointly within the MCMC. Base pace variance (0.4s) is not "
-                    "empirically derived from session data. No modeling of track evolution, "
-                    "traffic, weather, safety cars, or driver-specific performance.",
+                    "The quadratic degradation form is parametric and does not capture "
+                    "complex thermal or chemical dynamics. The weight effect (0.03 "
+                    "s/kg/lap) is fixed across circuits. Prior parameters are informed by "
+                    "historical ranges but not hierarchically fit across circuits. \u03c1 "
+                    "is estimated from residuals rather than jointly within the MCMC. Base "
+                    "pace variance (0.4s) is not empirically derived from session data. "
+                    "The optimizer minimizes expected race time using posterior or prior "
+                    "means, so it targets the mean-optimal stop rather than a median or "
+                    "risk-adjusted one. The window tolerance is a fixed fraction of "
+                    "race-time dispersion rather than a formal significance threshold. "
+                    "Nominal tire life defaults are domain priors until per-circuit values "
+                    "are derived from historical stint lengths. No modeling of track "
+                    "evolution, traffic, weather, safety cars, or driver-specific "
+                    "performance.",
                     className="methodology-text",
                 ),
             ],
@@ -972,8 +1346,7 @@ def render_strategy_editor(toggle, circuit, strategies):
     cards = []
 
     for s_idx, name in enumerate(strategies):
-        base = ALL_STRATEGIES[name]
-        scaled = scale_strategy(base, circuit_laps)
+        scaled = default_partition(ALL_STRATEGIES[name], circuit)
 
         stint_rows = []
         for t_idx, stint in enumerate(scaled):
@@ -1150,7 +1523,7 @@ def update_strategy_display(circuit, strategies, editor_toggle, custom_data):
             stops = len(scaled) - 1
             label = f"{stops}-Stop: {compounds}"
         else:
-            scaled = scale_strategy(ALL_STRATEGIES[name], circuit_laps)
+            scaled = default_partition(ALL_STRATEGIES[name], circuit)
             label = name
         cards.append(
             html.Div(
@@ -1199,30 +1572,66 @@ def run_simulation(n_clicks, circuit, strategies, pace, pit, sims,
     circuit_laps = simulator.circuits[circuit]["laps"]
     use_custom = "on" in (editor_toggle or []) and custom_data
     results = {}
+    opt_meta = {}
     errors = []
 
     for name in strategies:
-        if use_custom and name in custom_data:
-            strategy = custom_data[name]
-            compounds = "-".join(s["compound"][0] for s in strategy)
-            stops = len(strategy) - 1
+        custom_here = use_custom and name in custom_data
+        if custom_here:
+            sequence = [s["compound"] for s in custom_data[name]]
+            lengths = [int(s["laps"]) for s in custom_data[name]]
+            compounds = "-".join(c[0] for c in sequence)
+            stops = len(sequence) - 1
             label = f"{stops}-Stop: {compounds}"
+            if sum(lengths) != circuit_laps:
+                errors.append(
+                    f"{label}: total laps ({sum(lengths)}) != circuit ({circuit_laps})"
+                )
+                continue
         else:
-            strategy = scale_strategy(ALL_STRATEGIES[name], circuit_laps)
+            sequence = ALL_STRATEGIES[name]
             label = name
 
-        total_strat_laps = sum(s["laps"] for s in strategy)
-        if total_strat_laps != circuit_laps:
-            errors.append(
-                f"{label}: total laps ({total_strat_laps}) != circuit ({circuit_laps})"
-            )
-            continue
-
         try:
+            if custom_here:
+                res = simulator.resolve_fixed(
+                    circuit, sequence, lengths, tire_allocation,
+                )
+                resolved = res["resolved"]
+                window, window_n, cf_mean = None, None, None
+                pit_laps = res["pit_laps"]
+                extrap = res["extrapolation"]
+            else:
+                opt = simulator.optimize(
+                    circuit, sequence, tire_allocation, pace, pit,
+                )
+                resolved = opt["resolved"]
+                pit_laps = opt["pit_laps"]
+                cf_mean = opt["closed_form_mean"]
+                extrap = opt["extrapolation"]
+
             times = simulator.simulate(
-                circuit, strategy, tire_allocation, pace, pit, sims,
+                circuit, resolved, None, pace, pit, sims, pre_resolved=True,
             )
             results[label] = times.tolist()
+
+            if not custom_here:
+                tol = WINDOW_TOL_FRAC * float(np.std(times))
+                window, window_n = pit_window_from_surface(
+                    opt["surface"], cf_mean, tol,
+                )
+
+            opt_meta[label] = {
+                "sequence": sequence,
+                "lengths": [s["laps"] for s in resolved],
+                "ages": [s["tire_age"] for s in resolved],
+                "pit_laps": pit_laps,
+                "window": window,
+                "window_n": window_n,
+                "closed_form_mean": cf_mean,
+                "extrapolation": extrap,
+                "custom": custom_here,
+            }
         except Exception as e:
             errors.append(f"{label}: {str(e)}")
 
@@ -1246,7 +1655,7 @@ def run_simulation(n_clicks, circuit, strategies, pace, pit, sims,
     if not results:
         return None, status
 
-    return {"results": results, "circuit": circuit}, status
+    return {"results": results, "opt": opt_meta, "circuit": circuit}, status
 
 
 @app.callback(
@@ -1374,6 +1783,55 @@ def display_results(data):
     cons_name = summary_df.loc[cons_idx, "Strategy"]
     cons_std = summary_df.loc[cons_idx, "Std Dev"]
 
+    opt = data.get("opt", {})
+    window_rows = []
+    any_flag = False
+    for name in summary_df["Strategy"]:
+        meta = opt.get(name, {})
+        pit_laps = meta.get("pit_laps") or []
+        extrap = meta.get("extrapolation") or []
+        flagged = [e for e in extrap if e.get("flagged")]
+        if flagged:
+            any_flag = True
+        note = ""
+        if meta.get("custom"):
+            note = "manual split"
+        elif flagged:
+            note = "extrapolation-limited"
+        window_rows.append({
+            "Strategy": name,
+            "Stops": len(pit_laps),
+            "Optimal Pit Lap(s)": format_pit_laps(pit_laps),
+            "Window": format_window(meta.get("window")),
+            "Note": note or "\u2014",
+        })
+    window_df = pd.DataFrame(window_rows)
+
+    window_section = [
+        html.Div("OPTIMAL PIT WINDOWS", className="sidebar-section-label"),
+        dash_table.DataTable(
+            data=window_df.to_dict("records"),
+            columns=[{"name": c, "id": c} for c in window_df.columns],
+            style_header=TABLE_HEADER, style_cell=TABLE_CELL,
+            style_data_conditional=TABLE_CONDITIONAL,
+            style_table={"overflowX": "auto"},
+        ),
+    ]
+    if any_flag:
+        window_section.append(
+            html.Div(
+                "Extrapolation-limited strategies place a stint at or beyond the "
+                "longest run observed in practice for that compound. The optimum "
+                "reflects out-of-sample degradation extrapolation and should be "
+                "read with caution.",
+                style={
+                    "fontSize": "11px", "color": "#854d0e",
+                    "fontFamily": "JetBrains Mono", "marginTop": "8px",
+                    "lineHeight": "1.6", "maxWidth": "720px",
+                },
+            )
+        )
+
     return html.Div([
         html.Div(
             [
@@ -1392,6 +1850,7 @@ def display_results(data):
             ],
             className="d-flex gap-3 mb-4",
         ),
+        html.Div(window_section, className="mb-4"),
         html.Div([
             dbc.Button(
                 "Export Raw Data", id="export-raw-btn",
@@ -1535,48 +1994,83 @@ def toggle_sensitivity_button(data):
     return data is None
 
 
-def run_pit_loss_sweep(circuit, strategies_scaled, base_pace, default_pit,
+def _resolve_for_point(circuit, spec, base_pace, pit_loss, deg_multiplier,
+                       tire_allocation):
+    if spec["fixed"]:
+        res = simulator.resolve_fixed(
+            circuit, spec["sequence"], spec["lengths"], tire_allocation,
+        )
+        return res["resolved"], res["pit_laps"], None
+    opt = simulator.optimize(
+        circuit, spec["sequence"], tire_allocation, base_pace,
+        pit_loss, deg_multiplier,
+    )
+    return opt["resolved"], opt["pit_laps"], opt
+
+
+def _point_window(opt, times):
+    if opt is None:
+        return None
+    tol = WINDOW_TOL_FRAC * float(np.std(times))
+    window, _ = pit_window_from_surface(
+        opt["surface"], opt["closed_form_mean"], tol,
+    )
+    return window
+
+
+def run_pit_loss_sweep(circuit, specs, base_pace, default_pit,
                        tire_allocation, sims_per_point=300):
     pit_losses = np.arange(
         max(12.0, default_pit - 4.0),
         default_pit + 4.5,
         0.5,
     )
-    results = {name: [] for name in strategies_scaled}
+    results = {name: [] for name in specs}
     for pl in pit_losses:
-        for name, strategy in strategies_scaled.items():
+        for name, spec in specs.items():
+            resolved, pit_laps, opt = _resolve_for_point(
+                circuit, spec, base_pace, float(pl), 1.0, tire_allocation,
+            )
             times = simulator.simulate(
-                circuit, strategy, tire_allocation, base_pace, pl, sims_per_point,
+                circuit, resolved, None, base_pace, float(pl),
+                sims_per_point, pre_resolved=True,
             )
             results[name].append({
                 "pit_loss": float(pl),
                 "median": float(np.median(times)),
                 "p5": float(np.percentile(times, 5)),
                 "p95": float(np.percentile(times, 95)),
+                "pit_laps": pit_laps,
+                "window": _point_window(opt, times),
             })
     return results, pit_losses.tolist()
 
 
-def run_deg_sweep(circuit, strategies_scaled, base_pace, pit_loss,
+def run_deg_sweep(circuit, specs, base_pace, pit_loss,
                   tire_allocation, sims_per_point=300):
     deg_multipliers = np.arange(0.70, 1.35, 0.05)
-    results = {name: [] for name in strategies_scaled}
+    results = {name: [] for name in specs}
     for dm in deg_multipliers:
-        for name, strategy in strategies_scaled.items():
+        for name, spec in specs.items():
+            resolved, pit_laps, opt = _resolve_for_point(
+                circuit, spec, base_pace, pit_loss, float(dm), tire_allocation,
+            )
             times = simulator.simulate(
-                circuit, strategy, tire_allocation, base_pace, pit_loss,
-                sims_per_point, deg_multiplier=dm,
+                circuit, resolved, None, base_pace, pit_loss,
+                sims_per_point, deg_multiplier=float(dm), pre_resolved=True,
             )
             results[name].append({
                 "deg_multiplier": float(dm),
                 "median": float(np.median(times)),
                 "p5": float(np.percentile(times, 5)),
                 "p95": float(np.percentile(times, 95)),
+                "pit_laps": pit_laps,
+                "window": _point_window(opt, times),
             })
     return results, deg_multipliers.tolist()
 
 
-def run_2d_sweep(circuit, strategies_scaled, base_pace, default_pit,
+def run_2d_sweep(circuit, specs, base_pace, default_pit,
                  tire_allocation, sims_per_point=200):
     pit_losses = np.arange(
         max(12.0, default_pit - 4.0),
@@ -1588,10 +2082,14 @@ def run_2d_sweep(circuit, strategies_scaled, base_pace, default_pit,
     for dm in deg_multipliers:
         for pl in pit_losses:
             medians = {}
-            for name, strategy in strategies_scaled.items():
+            for name, spec in specs.items():
+                resolved, _, _ = _resolve_for_point(
+                    circuit, spec, base_pace, float(pl), float(dm),
+                    tire_allocation,
+                )
                 times = simulator.simulate(
-                    circuit, strategy, tire_allocation, base_pace, pl,
-                    sims_per_point, deg_multiplier=dm,
+                    circuit, resolved, None, base_pace, float(pl),
+                    sims_per_point, deg_multiplier=float(dm), pre_resolved=True,
                 )
                 medians[name] = float(np.median(times))
             grid[f"{pl:.1f}_{dm:.2f}"] = medians
@@ -1682,6 +2180,54 @@ def build_relative_figure(sweep_results, param_key, param_label, default_val,
     fig.update_layout(
         **chart_layout(f"Delta to Fastest \u2014 {param_label} Sweep \u2014 {circuit_name}"),
         xaxis_title=param_label, yaxis_title="Delta to Fastest (s)",
+    )
+    return fig
+
+
+def build_pitlap_figure(sweep_results, param_key, param_label, default_val,
+                        strategy_names, circuit_name):
+    fig = go.Figure()
+    for i, name in enumerate(strategy_names):
+        data = sweep_results[name]
+        x = [d[param_key] for d in data]
+        pit_series = [d.get("pit_laps") or [] for d in data]
+        windows = [d.get("window") for d in data]
+        n_stops = max((len(p) for p in pit_series), default=0)
+        if n_stops == 0:
+            continue
+        color = STRATEGY_COLORS[i % len(STRATEGY_COLORS)]
+        r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+
+        for stop_idx in range(n_stops):
+            xb, lob, hib = [], [], []
+            for xv, w in zip(x, windows):
+                if w and stop_idx < len(w):
+                    xb.append(xv)
+                    lob.append(w[stop_idx][0])
+                    hib.append(w[stop_idx][1])
+            if xb:
+                fig.add_trace(go.Scatter(
+                    x=xb + xb[::-1], y=hib + lob[::-1],
+                    fill="toself", fillcolor=f"rgba({r},{g},{b},0.10)",
+                    line=dict(width=0), showlegend=False, hoverinfo="skip",
+                ))
+
+            y = [p[stop_idx] if stop_idx < len(p) else None for p in pit_series]
+            trace_name = name if stop_idx == 0 else f"{name} \u00b7 stop {stop_idx + 1}"
+            fig.add_trace(go.Scatter(
+                x=x, y=y, name=trace_name, mode="lines",
+                line=dict(
+                    color=color, width=2,
+                    dash="solid" if stop_idx == 0 else "dot",
+                ),
+            ))
+
+    fig.add_vline(
+        x=default_val, line_dash="dash", line_color="#9ca3af", line_width=1,
+    )
+    fig.update_layout(
+        **chart_layout(f"Optimal Pit Lap vs {param_label} \u2014 {circuit_name}"),
+        xaxis_title=param_label, yaxis_title="Optimal Pit Lap (shaded: window)",
     )
     return fig
 
@@ -1778,37 +2324,41 @@ def run_sensitivity(n_clicks, results_data, circuit, strategies, pace, pit,
     use_custom = "on" in (editor_toggle or []) and custom_data
     gp_name = simulator.circuits[circuit]["gp_name"]
 
-    strategies_scaled = {}
+    specs = {}
     for name in strategies:
         if use_custom and name in custom_data:
-            strategy = custom_data[name]
-            compounds = "-".join(s["compound"][0] for s in strategy)
-            stops = len(strategy) - 1
+            sequence = [s["compound"] for s in custom_data[name]]
+            lengths = [int(s["laps"]) for s in custom_data[name]]
+            compounds = "-".join(c[0] for c in sequence)
+            stops = len(sequence) - 1
             label = f"{stops}-Stop: {compounds}"
+            if sum(lengths) != circuit_laps:
+                continue
+            specs[label] = {
+                "sequence": sequence, "fixed": True, "lengths": lengths,
+            }
         else:
-            strategy = scale_strategy(ALL_STRATEGIES[name], circuit_laps)
-            label = name
-        total = sum(s["laps"] for s in strategy)
-        if total == circuit_laps:
-            strategies_scaled[label] = strategy
+            specs[name] = {
+                "sequence": ALL_STRATEGIES[name], "fixed": False, "lengths": None,
+            }
 
-    if not strategies_scaled:
+    if not specs:
         return None, html.Div(
             "No valid strategies",
             style={"color": "#ef4444", "fontSize": "12px"},
         )
 
     pit_results, pit_vals = run_pit_loss_sweep(
-        circuit, strategies_scaled, pace, pit, tire_allocation, 300,
+        circuit, specs, pace, pit, tire_allocation, 300,
     )
     deg_results, deg_vals = run_deg_sweep(
-        circuit, strategies_scaled, pace, pit, tire_allocation, 300,
+        circuit, specs, pace, pit, tire_allocation, 300,
     )
     grid, grid_pit, grid_deg = run_2d_sweep(
-        circuit, strategies_scaled, pace, pit, tire_allocation, 200,
+        circuit, specs, pace, pit, tire_allocation, 200,
     )
 
-    strategy_names = list(strategies_scaled.keys())
+    strategy_names = list(specs.keys())
     pit_crossovers = find_crossovers(pit_results, "pit_loss", strategy_names)
     deg_crossovers = find_crossovers(deg_results, "deg_multiplier", strategy_names)
 
@@ -1873,6 +2423,10 @@ def display_sensitivity(data):
     heatmap_fig = build_heatmap_figure(
         grid, data["grid_pit"], data["grid_deg"],
         strategy_names, default_pit, gp_name,
+    )
+    deg_lap_fig = build_pitlap_figure(
+        deg_results, "deg_multiplier", "Degradation Multiplier", 1.0,
+        strategy_names, gp_name,
     )
 
     crossover_rows = []
@@ -1950,6 +2504,10 @@ def display_sensitivity(data):
             dbc.Tab(
                 dcc.Graph(figure=deg_rel_fig, config={"displayModeBar": False}),
                 label="Degradation (Relative)",
+            ),
+            dbc.Tab(
+                dcc.Graph(figure=deg_lap_fig, config={"displayModeBar": False}),
+                label="Optimal Pit Lap",
             ),
             dbc.Tab(
                 dcc.Graph(figure=heatmap_fig, config={"displayModeBar": False}),
