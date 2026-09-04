@@ -78,5 +78,25 @@
     "date": "2026-08-22",
     "text": "Posterior model updated for Zandvoort (Netherlands) using FP1 2026 data",
     "type": "model"
-  }
+  },
+  {
+  "date": "2026-09-04",
+  "text": "Fuel convention corrected so heavy early laps are slowest, and base pace redefined as a zero-fuel reference. Absolute race times shift by a constant; rankings, win rates, and windows are unchanged.",
+  "type": "app"
+},
+{
+  "date": "2026-09-04",
+  "text": "Sensitivity now re-optimizes the pit split at every sweep point, so strategies are compared at their own optima, and adds an Optimal Pit Lap view.",
+  "type": "app"
+},
+{
+  "date": "2026-09-04",
+  "text": "Added exact freshest-to-longest tire-set assignment and tire-life caps, with an extrapolation-limited flag when a stint exceeds the range supported by practice data.",
+  "type": "app"
+},
+{
+  "date": "2026-09-04",
+  "text": "Pit stops are now optimized rather than input: each strategy is a compound sequence, and the app solves the optimal pit lap and reports the window of equivalent laps.",
+  "type": "app"
+}
 ]
