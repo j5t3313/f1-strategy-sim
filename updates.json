@@ -98,5 +98,10 @@
   "date": "2026-09-04",
   "text": "Pit stops are now optimized rather than input: each strategy is a compound sequence, and the app solves the optimal pit lap and reports the window of equivalent laps.",
   "type": "app"
-}
+},
+  {
+    "date": "2026-09-05",
+    "text": "Posterior model updated for Monza (Italy) using FP2 2026 data",
+    "type": "model"
+  }
 ]
