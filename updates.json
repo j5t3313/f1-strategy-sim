@@ -103,5 +103,10 @@
     "date": "2026-09-05",
     "text": "Posterior model updated for Monza (Italy) using FP2 2026 data",
     "type": "model"
+  },
+  {
+    "date": "2026-09-12",
+    "text": "Posterior model updated for Madrid using FP2 2026 data",
+    "type": "model"
   }
 ]
