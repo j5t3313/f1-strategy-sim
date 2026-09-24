@@ -108,5 +108,10 @@
     "date": "2026-09-12",
     "text": "Posterior model updated for Madrid using FP2 2026 data",
     "type": "model"
+  },
+  {
+    "date": "2026-09-24",
+    "text": "Posterior model updated for Azerbaijan using FP2 2026 data",
+    "type": "model"
   }
 ]
