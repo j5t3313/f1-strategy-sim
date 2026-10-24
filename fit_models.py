@@ -3,7 +3,6 @@ import pickle
 import sys
 from pathlib import Path
 
-import fastf1
 import numpy as np
 import pandas as pd
 import jax
@@ -11,6 +10,8 @@ import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
+
+from f1_session import ensure_f1_auth, load_session
 
 jax.config.update("jax_platform_name", "cpu")
 numpyro.set_host_device_count(1)
@@ -77,13 +78,6 @@ FUEL_LOAD_KG = 92.5
 FUEL_RESERVE_KG = 3.0
 WEIGHT_EFFECT = 0.03
 FP2_ESTIMATED_FUEL_FRACTION = 0.6
-
-
-def load_session(year, circuit_name, session_type="FP2", cache_dir=".f1_cache"):
-    fastf1.Cache.enable_cache(cache_dir)
-    session = fastf1.get_session(year, circuit_name, session_type)
-    session.load()
-    return session
 
 
 def extract_stints(session, circuit_name):
@@ -334,6 +328,7 @@ def run_pipeline(year, circuit_key, session_type="FP2", output_dir="prebuilt_mod
 
     print(f"Loading {session_type} data for {circuit_name} {year}")
     try:
+        ensure_f1_auth()
         session = load_session(year, circuit_name, session_type, cache_dir)
     except Exception as e:
         print(f"Failed to load session: {e}")

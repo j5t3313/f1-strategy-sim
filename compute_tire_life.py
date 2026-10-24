@@ -4,9 +4,10 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-import fastf1
 import numpy as np
 import pandas as pd
+
+from f1_session import F1DataUnavailable, ensure_f1_auth, load_session
 
 CIRCUIT_LOOKUP = {
     "australia": "Australia",
@@ -55,10 +56,7 @@ REFERENCE_OFFSET = {"SOFT": -1.0, "MEDIUM": 0.0, "HARD": 0.7}
 
 
 def load_race(year, circuit_name, cache_dir):
-    fastf1.Cache.enable_cache(cache_dir)
-    session = fastf1.get_session(year, circuit_name, "R")
-    session.load()
-    return session
+    return load_session(year, circuit_name, "R", cache_dir)
 
 
 def stint_lengths(session, min_stint):
@@ -189,6 +187,12 @@ def main():
             print(f"Unknown circuit: {c}")
             print(f"Available: {', '.join(sorted(CIRCUIT_LOOKUP.keys()))}")
             sys.exit(1)
+
+    try:
+        ensure_f1_auth()
+    except F1DataUnavailable as e:
+        print(e)
+        sys.exit(1)
 
     years = list(range(args.start_year, args.end_year + 1))
 

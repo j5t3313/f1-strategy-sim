@@ -129,6 +129,15 @@ A separate pipeline script fits Bayesian tire models from FP2 (or other session)
 pip install -r requirements-pipeline.txt
 ```
 
+Since October 2026 the F1 live timing archive requires an F1 TV Access (or higher) login. Sign in once per machine; FastF1 stores the token outside the repo and renews it when needed:
+
+```
+python -m fastf1 auth f1tv --authenticate
+python -m fastf1 auth f1tv --status
+```
+
+For non-interactive runs, set `F1_USERNAME` and `F1_PASSWORD` as environment variables instead. Never commit credentials. The scripts check the login before loading and fail with a clear error rather than producing an empty session.
+
 ### Usage
 
 ```
@@ -190,7 +199,7 @@ Restrict to specific circuits by passing their keys, for example `python compute
 
 A workflow in `.github/workflows/update-models.yml` automates the model-fitting pipeline. Go to the Actions tab, select "Update Tire Models," choose the circuit and session from the dropdowns, and run. The workflow installs pipeline dependencies, runs `fit_models.py`, commits the updated model files, and pushes. Railway redeploys automatically on the new commit.
 
-Requires write permissions for Actions: Settings -> Actions -> General -> Workflow permissions -> "Read and write permissions."
+Requires write permissions for Actions: Settings -> Actions -> General -> Workflow permissions -> "Read and write permissions." Also requires `F1_USERNAME` and `F1_PASSWORD` repository secrets (Settings -> Secrets and variables -> Actions) for the F1 TV login.
 
 GitHub-hosted runners are periodically IP-blocked by the livetiming API. When a run fails within seconds of starting, run `fit_models.py` locally and commit the resulting pickle by hand.
 

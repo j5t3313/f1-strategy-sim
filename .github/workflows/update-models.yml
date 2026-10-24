@@ -62,6 +62,9 @@ jobs:
       - run: mkdir -p .f1_cache
 
       - run: python fit_models.py ${{ inputs.circuit }} --year ${{ inputs.year }} --session ${{ inputs.session }}
+        env:
+          F1_USERNAME: ${{ secrets.F1_USERNAME }}
+          F1_PASSWORD: ${{ secrets.F1_PASSWORD }}
 
       - name: Log model update
         run: |
