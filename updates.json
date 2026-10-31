@@ -128,5 +128,10 @@
     "date": "2026-10-24",
     "text": "Posterior model updated for United States using FP2 2026 data",
     "type": "model"
+  },
+   {
+    "date": "2026-10-31",
+    "text": "Posterior model updated for Mexico using FP2 2026 data",
+    "type": "model"
   }
 ]
