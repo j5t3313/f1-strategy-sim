@@ -143,5 +143,10 @@
     "date": "2026-11-25",
     "text": "Posterior model updated for Las Vegas using FP3 2026 data (FP1 and FP2 were wet, so FP3 was the only dry session; no HARD running, so HARD uses default priors)",
     "type": "model"
+  },
+   {
+    "date": "2026-11-28",
+    "text": "Posterior model updated for Qatar using FP2 2026 data",
+    "type": "model"
   }
 ]
